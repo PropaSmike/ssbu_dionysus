@@ -224,6 +224,21 @@ pub unsafe fn set_disp_order(
 static PENDING: Mutex<Vec<(u64, u16)>> = Mutex::new(Vec::new());
 
 #[cfg(not(test))]
+pub unsafe fn listed_count() -> Option<usize> {
+    let tree = resolve()?;
+    let rows = tree.rows().ok()?;
+    Some(
+        rows.into_iter()
+            .filter(|row| {
+                tree.field(*row, disp_order_key())
+                    .and_then(|field| tree.scalar(field))
+                    .map_or(false, |value| value >= 0)
+            })
+            .count(),
+    )
+}
+
+#[cfg(not(test))]
 pub unsafe fn resolve() -> Option<ParamTree> {
     let global = core::ptr::read_volatile((crate::game::addr(0x532E730)) as *const usize);
     if global == 0 {

@@ -36,6 +36,8 @@ pub mod prc;
 pub mod settings;
 pub mod slots;
 pub mod stage_gimmicks;
+pub mod stage_order;
+pub mod stage_select_layout;
 pub mod status_starts;
 pub mod text_layout;
 pub mod vtable_copy;

@@ -49,6 +49,7 @@ fn mounted_now() {
     }
     #[cfg(feature = "css_slot")]
     crate::global_motions::install();
+    crate::stage_select_ui::install();
     #[cfg(feature = "css_slot")]
     crate::chara_orders::watch();
     #[cfg(feature = "css_slot")]

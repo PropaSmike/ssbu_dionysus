@@ -33,7 +33,11 @@ fn load() -> Settings {
             Settings::default()
         }
     };
-    skyline::println!("[settings] gliding {}", if loaded.gliding { "on" } else { "off" });
+    skyline::println!(
+        "[settings] gliding {}, stage select {}",
+        if loaded.gliding { "on" } else { "off" },
+        loaded.stage_select_ui.name()
+    );
     loaded
 }
 

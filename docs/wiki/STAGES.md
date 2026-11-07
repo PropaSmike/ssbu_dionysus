@@ -27,6 +27,23 @@ bgm_setting_no = 0                # its column, 0 to 15
 Pack Workbench keys, ignored by the engine. Always set `content_donor_tree`
 with `content_donor`.
 
+## Past 121 stages
+
+The game has 121 stage buttons. Dionysus adds more, up to 255, for any stage
+on the screen, whichever mod added it. Players pick how with `stage_select_ui`
+in `settings.toml` (see the README).
+
+`disp_order` sets where a stage sits; stages sharing a value sit side by side.
+In `stage.toml` it goes up to 255. A `stage_database_entries` row in the CSK
+Collection's JSON stops at 127. To place one higher, put a `stage_order.toml`
+in the pack's folder:
+
+```toml
+ui_stage_my_stage = 130   # its ui_stage_id = its position, 0 to 255
+```
+
+A plugin can do the same with `stage::set_disp_order("ui_stage_my_stage", 130)`.
+
 ## Several stages in one pack
 
 ```toml

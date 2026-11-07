@@ -614,12 +614,6 @@ pub(crate) fn apply_select_cap(phase: &str) {
                     }
                 }
             }
-            skyline::println!(
-                "[stagecap] needs set_parts_n_stage_121+ panes in \
-                 ui/layout/patch/stage_select2 to show anything past 121, and a \
-                 disp_order per stage below the cap (tools/stage_disp_order.py; \
-                 u8 disp_order reaches 255)"
-            );
         }
         Err(error) => skyline::println!("[stagecap] NOT applied: {:?}", error),
     }

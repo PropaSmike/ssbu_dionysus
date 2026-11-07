@@ -162,6 +162,7 @@ mod stage_sound;
 mod stage_resolve_probe;
 mod stage_select_cap;
 mod stage_select_page;
+mod stage_select_ui;
 mod stage_select_slice;
 #[cfg(feature = "stage_relocate")]
 mod stage_transaction;

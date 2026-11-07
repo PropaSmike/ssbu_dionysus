@@ -55,10 +55,23 @@ The first boot writes `sd:/ultimate/dionysus/settings.toml`:
 
 ```toml
 gliding = true
+stage_select_ui = "vanilla"
 ```
 
 `false` turns off the glide that packs get from the engine, for use with
 another glide mod.
+
+`stage_select_ui` says which stage select screen you have installed, so
+Dionysus can add buttons for stages past the 121 the game has:
+
+| Value | Use it with | What Dionysus does |
+|---|---|---|
+| `vanilla` | The game's screen, or a reskin that keeps its grid | Adds the buttons and shrinks the grid to fit them |
+| `page_turning` | A screen with its own page turning, like Ultimate S | Adds the buttons off screen for its script to place |
+| `none` | Anything else | Leaves the layout alone |
+
+Nothing changes until there are more stages than buttons. With `vanilla`, a
+screen that is not a plain grid is left alone and the log says so.
 
 ## A fighter
 
@@ -145,7 +158,7 @@ are retired; the ones above show everything they did.
 - item families: Assist Trophies, Pokemon and bosses
 - enemies: Ultimate's stage enemies on any stage, and new enemy kinds made
   from them
-- stages: identity, forms, stage select entry and paging, collision,
+- stages: identity, forms, stage select entry and buttons, collision,
   settings, music
 - menus: main menu buttons, modes, battles started from a menu
 - several packs changing the same game function at once

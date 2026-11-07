@@ -4,10 +4,12 @@ use crate::{resolve, Error};
 
 type MotionRateFn = unsafe extern "C" fn(u64, f32) -> i32;
 type MotionFn = unsafe extern "C" fn(u64, *mut f32, *mut f32) -> i32;
+type DispOrderFn = unsafe extern "C" fn(u64, u16) -> i32;
 
 static MOTION_RATE_FN: AtomicUsize = AtomicUsize::new(0);
 static MOTION_FRAME_FN: AtomicUsize = AtomicUsize::new(0);
 static MOTION_FN: AtomicUsize = AtomicUsize::new(0);
+static DISP_ORDER_FN: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Motion {
@@ -17,6 +19,16 @@ pub struct Motion {
 
 fn set_hash(set: &str) -> u64 {
     dionysus_core::hash40(&set.to_ascii_lowercase())
+}
+
+pub fn set_disp_order(ui_stage: &str, disp_order: u16) -> Result<(), Error> {
+    let address = resolve(&DISP_ORDER_FN, b"clone_engine_set_stage_disp_order\0").ok_or(Error::EngineUnavailable)?;
+    let function: DispOrderFn = unsafe { std::mem::transmute(address) };
+    let result = unsafe { function(set_hash(ui_stage), disp_order) };
+    if result < 0 {
+        return Err(Error::Engine(result));
+    }
+    Ok(())
 }
 
 pub fn motion(set: &str) -> Result<Motion, Error> {

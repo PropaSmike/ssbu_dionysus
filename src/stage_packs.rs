@@ -384,6 +384,25 @@ impl PackDeclaration {
 const MOD_ROOT: &str = "sd:/ultimate/mods";
 
 #[cfg(all(not(test), feature = "stage_mint"))]
+fn load_orders(directory: &std::path::Path) {
+    use dionysus_core::stage_order;
+    let Ok(text) = std::fs::read_to_string(directory.join(stage_order::FILE_NAME)) else {
+        return;
+    };
+    let name = directory
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let (orders, problems) = stage_order::parse(&text);
+    for problem in problems {
+        skyline::println!("[stagepack] {name}/{} {problem}", stage_order::FILE_NAME);
+    }
+    for (stage, order) in &orders {
+        crate::stage_db_rows::request_disp_order(crate::stage_ledger::hash40(stage), *order);
+    }
+    skyline::println!("[stagepack] {name}: {} stage position(s) queued", orders.len());
+}
+
 pub fn load_all() {
     let Ok(entries) = std::fs::read_dir(MOD_ROOT) else {
         skyline::println!("[stagepack] no {MOD_ROOT}; no data-only stage packs to load");
@@ -395,6 +414,7 @@ pub fn load_all() {
         if !directory.is_dir() {
             continue;
         }
+        load_orders(&directory);
         let manifest = directory.join("stage.toml");
         let Ok(text) = std::fs::read_to_string(&manifest) else {
             continue;
