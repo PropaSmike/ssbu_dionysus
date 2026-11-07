@@ -214,7 +214,8 @@ unsafe fn pause_state(ctx: &mut skyline::hooks::InlineCtx) {
         _ => CHOICE_QUIT,
     };
     CHOICE.store(choice, Ordering::Release);
-    let ended = crate::menu_battle::end_battle().is_ok();
+    let own_battle = choice == CHOICE_EXIT || crate::menu_sequences::active() != 0;
+    let ended = own_battle && crate::menu_battle::end_battle().is_ok();
     skyline::println!(
         "[battlepause] pause ended the battle: {}{}",
         if choice == CHOICE_EXIT { "exit row" } else { "quit" },
