@@ -34,9 +34,10 @@ on the screen, whichever mod added it. Players pick how with `stage_select_ui`
 in `settings.toml` (see the README).
 
 `disp_order` sets where a stage sits; stages sharing a value sit side by side.
-In `stage.toml` it goes up to 255. A `stage_database_entries` row in the CSK
-Collection's JSON stops at 127. To place one higher, put a `stage_order.toml`
-in the pack's folder:
+In `stage.toml` it goes up to 255. In the CSK Collection's database JSON it stops at 127:
+above that, the whole file is refused and every row in it is lost.
+To place a row higher, keep the JSON at 127 or lower
+and put a `stage_order.toml` in the pack's folder:
 
 ```toml
 ui_stage_my_stage = 130   # its ui_stage_id = its position, 0 to 255
