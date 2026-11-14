@@ -548,6 +548,9 @@ unsafe fn ground_module_owner_kind(module: u64) -> Option<i32> {
     if accessor < 0x1000 || accessor % 8 != 0 {
         return None;
     }
+    if let Some(minted) = crate::article_kind_facade::minted_kind_of_boma(accessor as usize) {
+        return Some(minted);
+    }
     let accessor = accessor as *mut smash::app::BattleObjectModuleAccessor;
     let kind = smash::app::utility::get_kind(&mut *accessor);
     (kind >= 0).then_some(kind)
@@ -816,6 +819,13 @@ macro_rules! custom_article_source_kind_sites {
                 let kind = ctx.registers[$reg].x() as i32;
                 if let Some(source) = custom_articles::custom_weapon_source_kind(kind) {
                     ctx.registers[$reg].set_x(source as u64);
+                    static SEEN: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+                    if SEEN.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 2 {
+                        crate::dbg_log_public(&format!(
+                            "[articlesource] {:#x}: weapon kind {kind} reads as its source {source}",
+                            $offset as usize
+                        ));
+                    }
                 }
             }
         )*
@@ -834,6 +844,13 @@ custom_article_source_kind_sites! {
     custom_article_hookshot_owner_row(8, 0x3522938, "hookshot param row: younglink's reads kind 23, any other kind 46");
     custom_article_whip_owner_row(12, 0x34f87c8, "whip param row: one of simon/richter by weapon kind");
     custom_article_whipwire_owner_row(10, 0x34fc6f0, "whipwire param row: one of simon/richter by weapon kind");
+    custom_article_arrow_shoot_link(8, 0xc2bf9c, "link/toonlink arrow shoot callback: double-arrow speed for link's arrow (31)");
+    custom_article_arrow_shoot_toonlink(8, 0xc2bffc, "link/toonlink arrow shoot callback: charge speed for toonlink's arrow (195)");
+    custom_article_arrow_hit_record(8, 0x342ea44, "arrow specializer slot 22: records the fighter an arrow (31, 195) hit");
+    custom_article_arrow_hit_stick(8, 0x342eae4, "arrow specializer slot 29: an arrow (31, 195) sticks into the fighter it hit");
+    custom_article_arrow_flight_root(8, 0x342f6cc, "arrow flight rotation: toonlink's arrow (195) turns its root joint");
+    custom_article_arrow_stick_pose(8, 0x342fd48, "arrow specializer slot 17: toonlink's arrow (195) stuck pose");
+    custom_article_arrow_stick_pose_end(8, 0x34300d8, "arrow specializer slot 17: toonlink's arrow (195) stuck pose, second joint");
 }
 
 #[cfg(feature = "css_slot")]
@@ -1232,6 +1249,7 @@ pub(crate) unsafe fn weapon_motion_setup_probe(object: *mut u8) -> u64 {
     if object.is_null() {
         return call_original!(object);
     }
+    let _window = crate::article_kind_facade::set_up_window(object as usize);
 
     #[cfg(feature = "diag_article_motion")]
     let kind = core::ptr::read_volatile(object.add(0xc) as *const i32);
@@ -2116,6 +2134,7 @@ pub(crate) fn install_custom_resource_name_hooks() {
     install_custom_article_gate_base_hooks();
     install_custom_article_source_kind_sites();
     skyline::install_hooks!(custom_article_kind_spec, custom_article_class_recache);
+    crate::article_kind_facade::install();
     #[cfg(feature = "diag_article")]
     {
         install_module_190_probes();

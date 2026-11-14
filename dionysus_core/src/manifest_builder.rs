@@ -1057,6 +1057,26 @@ mod tests {
     }
 
     #[test]
+    fn two_articles_keep_their_own_lvds() {
+        let pearl = ArticleLvd::new("pearl.lvd").vertex_at(0, "top", 0.0, 2.0, 0.0);
+        let block = ArticleLvd::new("forge.lvd")
+            .vertex_at(0, "top", -8.0, 8.0, 0.0)
+            .vertex_at(1, "top", 8.0, 8.0, 0.0);
+        let text = Manifest::new("herobrine", "mewtwo")
+            .article("pearl", "mario/fireball")
+            .article("block", "pickel/forge")
+            .article_lvd("pearl", pearl.clone())
+            .article_lvd("block", block.clone())
+            .to_toml();
+        let fighter = &crate::fighter_toml::parse_all(&text).unwrap()[0];
+        let lvd_of = |name: &str| {
+            fighter.articles.iter().find(|article| article.name == name).and_then(|article| article.lvd.clone())
+        };
+        assert_eq!(lvd_of("pearl"), Some(pearl), "{text}");
+        assert_eq!(lvd_of("block"), Some(block), "{text}");
+    }
+
+    #[test]
     fn a_hud_renders_its_own_table_and_parses_back() {
         let text = Manifest::new("wawa", "samus")
             .hud("cloud")

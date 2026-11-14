@@ -42,6 +42,14 @@ it, shared with other mods' `clone_weapon` calls; otherwise the engine does.
 Read `MY_FIGHTER.article("beam").weapon_kind()`; never assume `615 + n`.
 Under Smashline 2.0 a base fighter of kind 94 or above takes no articles.
 
+Once built, an article shows the game the weapon kind of the article it was
+copied from, so the game's code and the source's own scripts treat it as that
+article (Example : a copy of Toon Link's arrow turns in flight and sticks in fighters as
+the original one does). On an article, `utility::get_kind` answers the source's kind and
+`dionysus_api::article_kind(boma)` answers its own. ParamConfig still sees its
+own. `article_kind_facade = false` in `sd:/ultimate/dionysus/settings.toml`
+turns this off.
+
 ## Articles with collision
 
 An article with an `.lvd` file keeps the base's file name inside your folder:

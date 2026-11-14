@@ -21,6 +21,7 @@ impl StageSelectUi {
 pub struct Settings {
     pub gliding: bool,
     pub stage_select_ui: StageSelectUi,
+    pub article_kind_facade: bool,
 }
 
 impl Default for Settings {
@@ -28,6 +29,7 @@ impl Default for Settings {
         Settings {
             gliding: true,
             stage_select_ui: StageSelectUi::Vanilla,
+            article_kind_facade: true,
         }
     }
 }
@@ -75,6 +77,13 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     index + 1
                 )),
             },
+            "article_kind_facade" => match flag(value) {
+                Some(on) => settings.article_kind_facade = on,
+                None => problems.push(format!(
+                    "line {}: article_kind_facade = {value} is not true or false; ignored",
+                    index + 1
+                )),
+            },
             _ => problems.push(format!("line {}: unknown setting {key}; ignored", index + 1)),
         }
     }
@@ -84,6 +93,17 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloned_articles_show_their_source_kind_unless_turned_off() {
+        assert!(Settings::default().article_kind_facade);
+        assert!(!parse("article_kind_facade = false
+").0.article_kind_facade);
+        let (settings, problems) = parse("article_kind_facade = sometimes
+");
+        assert!(settings.article_kind_facade);
+        assert_eq!(problems.len(), 1);
+    }
 
     #[test]
     fn the_default_file_turns_gliding_on() {

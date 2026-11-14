@@ -536,6 +536,10 @@ pub(crate) fn weapon_kind_of_class(class: usize) -> Option<i32> {
 }
 
 pub(crate) fn minted_kind_of_object(object: usize) -> Option<i32> {
+    #[cfg(feature = "css_slot")]
+    if let Some(kind) = crate::article_kind_facade::minted_kind_of(object) {
+        return Some(kind);
+    }
     minted_kind_of(object)
 }
 

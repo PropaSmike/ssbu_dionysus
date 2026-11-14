@@ -2528,6 +2528,11 @@ unsafe fn utility_get_kind_hook(boma: u64) -> i32 {
     if !caller_is_outside_main_text(lr) {
         return kind;
     }
+    if caller_is_param_config(lr) {
+        if let Some(minted) = article_kind_facade::minted_kind_of_boma(boma as usize) {
+            return minted;
+        }
+    }
     if boma == 0 || clone_definition(kind).is_some() {
         return kind;
     }
@@ -2585,7 +2590,8 @@ pub extern "C" fn clone_engine_article_owner_kind_v1(module_accessor: u64) -> i3
         let object_id = core::ptr::read_volatile(
             (module_accessor as usize + BOMA_BATTLE_OBJECT_ID) as *const u32,
         );
-        let weapon_kind = smash::app::utility::get_kind(&mut *boma);
+        let weapon_kind = article_kind_facade::minted_kind_of_boma(module_accessor as usize)
+            .unwrap_or_else(|| smash::app::utility::get_kind(&mut *boma));
 
         let linked = weapon_owner_clone_kind(
             boma,
@@ -2821,6 +2827,7 @@ unsafe extern "C" fn pocket_watch_tick(agent: &mut smash::lua2cpp::L2CFighterBas
             .swap(pickable, core::sync::atomic::Ordering::Relaxed),
     ];
     let held = smash::app::lua_bind::WorkModule::get_int(boma, POCKET_OBJECT_KIND);
+    let held = pocketed_article_minted_kind(boma, held).unwrap_or(held);
     pocket_item_tick(boma, entry as usize, held, contact);
     let previous =
         POCKET_PREVIOUS[entry as usize].swap(held, core::sync::atomic::Ordering::Relaxed);
@@ -2839,6 +2846,32 @@ unsafe extern "C" fn pocket_watch_tick(agent: &mut smash::lua2cpp::L2CFighterBas
     if n < 12 {
         dbg_log!("[artowner] #{n} pocket watch entry={entry} took wkind={held} -> clone {owner}");
     }
+}
+
+#[cfg(feature = "css_slot")]
+static POCKET_FACADE_LOG: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "css_slot")]
+unsafe fn pocketed_article_minted_kind(boma: *mut smash::app::BattleObjectModuleAccessor, held: i32) -> Option<i32> {
+    use smash::lib::lua_const::*;
+    if pocket_slot_is_empty(held)
+        || smash::app::lua_bind::WorkModule::get_int(boma, *FIGHTER_MURABITO_INSTANCE_WORK_ID_INT_SPECIAL_N_OBJECT_CATEGORY)
+            != *BATTLE_OBJECT_CATEGORY_WEAPON
+    {
+        return None;
+    }
+    let id = smash::app::lua_bind::WorkModule::get_int(boma, *FIGHTER_MURABITO_INSTANCE_WORK_ID_INT_SPECIAL_N_OBJECT_ID) as u32;
+    let minted = article_kind_facade::minted_kind_of_object_id(id)?;
+    if custom_articles::custom_weapon_source_kind(minted) != Some(held) {
+        return None;
+    }
+    smash::app::lua_bind::WorkModule::set_int(boma, minted, POCKET_OBJECT_KIND);
+    if POCKET_FACADE_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 8 {
+        crate::dbg_log_public(&format!(
+            "[articlekind] pocketed object {id:#x} is weapon kind {minted}, shown as {held}: the pocket keeps {minted}"
+        ));
+    }
+    Some(minted)
 }
 
 #[cfg(feature = "css_slot")]
@@ -4834,6 +4867,9 @@ unsafe fn custom_article_weapon_name(ctx: &mut skyline::hooks::InlineCtx) {
 
 mod article_bridges;
 use article_bridges::*;
+
+#[cfg(feature = "css_slot")]
+mod article_kind_facade;
 
 #[cfg(feature = "css_slot")]
 mod copy_model_probe;

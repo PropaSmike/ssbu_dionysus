@@ -34,9 +34,10 @@ fn load() -> Settings {
         }
     };
     skyline::println!(
-        "[settings] gliding {}, stage select {}",
+        "[settings] gliding {}, stage select {}, article kind facade {}",
         if loaded.gliding { "on" } else { "off" },
-        loaded.stage_select_ui.name()
+        loaded.stage_select_ui.name(),
+        if loaded.article_kind_facade { "on" } else { "off" }
     );
     loaded
 }

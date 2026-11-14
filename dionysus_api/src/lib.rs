@@ -595,6 +595,7 @@ static PARAM_OVERRIDE_FN: AtomicUsize = AtomicUsize::new(0);
 static PARAM_INT_OVERRIDE_FN: AtomicUsize = AtomicUsize::new(0);
 static ARTICLE_OWNER_KIND_FN: AtomicUsize = AtomicUsize::new(0);
 static POCKET_HOLDER_KIND_FN: AtomicUsize = AtomicUsize::new(0);
+static ARTICLE_KIND_FN: AtomicUsize = AtomicUsize::new(0);
 static SHARED_HOOK_FN: AtomicUsize = AtomicUsize::new(0);
 static SHARED_HOOK_V2_FN: AtomicUsize = AtomicUsize::new(0);
 static SHARED_HOOK_STATUS_FN: AtomicUsize = AtomicUsize::new(0);
@@ -1745,6 +1746,14 @@ pub fn shared_hook_words(offset: u64) -> Option<[u32; 4]> {
     let function: SharedHookWordsFn = unsafe { std::mem::transmute(address) };
     let mut words = [0u32; 4];
     (unsafe { function(offset, &mut words) } == 1).then_some(words)
+}
+
+pub fn article_kind(module_accessor: u64) -> i32 {
+    let Some(address) = resolve(&ARTICLE_KIND_FN, b"clone_engine_article_kind_v1 ") else {
+        return -1;
+    };
+    let function: ArticleOwnerKindFn = unsafe { std::mem::transmute(address) };
+    unsafe { function(module_accessor) }
 }
 
 pub fn pocket_holder_kind(module_accessor: u64) -> i32 {

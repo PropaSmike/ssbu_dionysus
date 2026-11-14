@@ -258,7 +258,9 @@ Compare fighters with `is` and `owns`; `utility::get_kind` answers the base.
 
 Under Smashline 2.0 or later, Smashline numbers article weapon kinds, shared with
 other mods' `clone_weapon` calls. Read `weapon_kind()` and `index()` at runtime;
-never assume `615 + n`. A base fighter of kind 94 or above takes no articles there.
+never assume `615 + n`. A built article answers `utility::get_kind` with its
+source's kind; `article_kind(boma)` gives its own (see
+[Articles](wiki/ARTICLES_AND_KIRBY.md#articles)). A base fighter of kind 94 or above takes no articles there.
 
 ### Scripts
 

@@ -265,7 +265,8 @@ unsafe fn route_to_donor(kind: i32, object: usize, event: usize) -> Option<u64> 
     if !readable(sender) {
         return None;
     }
-    let minted = core::ptr::read_volatile((sender + OBJECT_KIND) as *const i32);
+    let shown = core::ptr::read_volatile((sender + OBJECT_KIND) as *const i32);
+    let minted = crate::clone_vtables::minted_kind_of_object(sender).unwrap_or(shown);
     let source = crate::custom_articles::custom_weapon_source_kind(minted)?;
     let table = crate::custom_articles::custom_weapon_owner_kind(minted);
     let owned = table == Some(kind) || (table.is_some() && table == crate::clone_base(kind));
@@ -281,7 +282,7 @@ unsafe fn route_to_donor(kind: i32, object: usize, event: usize) -> Option<u64> 
     let handler: LinkEventFn = core::mem::transmute(handler);
     core::ptr::write_volatile((sender + OBJECT_KIND) as *mut i32, source);
     let answer = handler(donor_class, object, event);
-    core::ptr::write_volatile((sender + OBJECT_KIND) as *mut i32, minted);
+    core::ptr::write_volatile((sender + OBJECT_KIND) as *mut i32, shown);
     if EVENT_LOG.fetch_add(1, Ordering::Relaxed) < LOG_BUDGET {
         crate::dbg_log_public(&format!(
             "[tether] clone kind {kind}: weapon {minted} (minted from {source}) sent a link event; fighter kind {donor}'s handler answered {answer}"

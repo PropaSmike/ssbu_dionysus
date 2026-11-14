@@ -58,6 +58,9 @@ gliding = true
 stage_select_ui = "vanilla"
 ```
 
+`article_kind_facade` is not written but defaults to `true`; see
+docs/wiki/ARTICLES_AND_KIRBY.md.
+
 `false` turns off the glide that packs get from the engine, for use with
 another glide mod.
 
