@@ -30,6 +30,7 @@ type PauseChoiceFn = unsafe extern "C" fn() -> i32;
 type KeepMusicFn = unsafe extern "C" fn(u32) -> i32;
 type PlayBgmFn = unsafe extern "C" fn(*const c_char) -> i32;
 type StopBgmFn = unsafe extern "C" fn() -> i32;
+type ViewerSlotFn = unsafe extern "C" fn(u32) -> i32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PauseExit<'a> {
@@ -100,6 +101,18 @@ static NEXT_BATTLE_FN: AtomicUsize = AtomicUsize::new(0);
 static MOVIE_PLAY_FN: AtomicUsize = AtomicUsize::new(0);
 static MOVIE_STATE_FN: AtomicUsize = AtomicUsize::new(0);
 static MOVIE_STOP_FN: AtomicUsize = AtomicUsize::new(0);
+static VIEWER_BEGIN_FN: AtomicUsize = AtomicUsize::new(0);
+static VIEWER_STATE_FN: AtomicUsize = AtomicUsize::new(0);
+static VIEWER_END_FN: AtomicUsize = AtomicUsize::new(0);
+static GALLERY_COUNT_FN: AtomicUsize = AtomicUsize::new(0);
+static GALLERY_COSTUME_FN: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ViewerState {
+    Loading,
+    Built,
+    Shown,
+}
 
 pub fn register_sequence(code: u32, runs_as: u32) -> Result<(), Error> {
     let address = resolve(&REGISTER_SEQUENCE_FN, b"clone_engine_register_sequence\0")
@@ -391,6 +404,63 @@ pub fn stop_bgm() -> Result<(), Error> {
         return Err(Error::Engine(result));
     }
     Ok(())
+}
+
+pub fn viewer_begin(slot: u32) -> Result<(), Error> {
+    let address = resolve(&VIEWER_BEGIN_FN, b"clone_engine_viewer_begin\0")
+        .ok_or(Error::EngineUnavailable)?;
+    let function: ViewerSlotFn = unsafe { std::mem::transmute(address) };
+    let result = unsafe { function(slot) };
+    if result < 0 {
+        return Err(Error::Engine(result));
+    }
+    Ok(())
+}
+
+pub fn viewer_state(slot: u32) -> Result<ViewerState, Error> {
+    let address = resolve(&VIEWER_STATE_FN, b"clone_engine_viewer_state\0")
+        .ok_or(Error::EngineUnavailable)?;
+    let function: ViewerSlotFn = unsafe { std::mem::transmute(address) };
+    match unsafe { function(slot) } {
+        0 => Ok(ViewerState::Loading),
+        1 => Ok(ViewerState::Built),
+        2 => Ok(ViewerState::Shown),
+        other => Err(Error::Engine(other)),
+    }
+}
+
+pub fn viewer_end() -> Result<(), Error> {
+    let address = resolve(&VIEWER_END_FN, b"clone_engine_viewer_end\0")
+        .ok_or(Error::EngineUnavailable)?;
+    let function: EndBattleFn = unsafe { std::mem::transmute(address) };
+    let result = unsafe { function() };
+    if result < 0 {
+        return Err(Error::Engine(result));
+    }
+    Ok(())
+}
+
+pub fn gallery_item_count() -> Result<usize, Error> {
+    let address = resolve(&GALLERY_COUNT_FN, b"clone_engine_gallery_count\0")
+        .ok_or(Error::EngineUnavailable)?;
+    let function: EndBattleFn = unsafe { std::mem::transmute(address) };
+    let result = unsafe { function() };
+    if result < 0 {
+        return Err(Error::Engine(result));
+    }
+    Ok(result as usize)
+}
+
+pub fn gallery_item_costume(index: usize) -> Result<u8, Error> {
+    let address = resolve(&GALLERY_COSTUME_FN, b"clone_engine_gallery_costume\0")
+        .ok_or(Error::EngineUnavailable)?;
+    let function: ViewerSlotFn = unsafe { std::mem::transmute(address) };
+    let index = u32::try_from(index).map_err(|_| Error::Engine(-1))?;
+    let result = unsafe { function(index) };
+    if result < 0 {
+        return Err(Error::Engine(result));
+    }
+    Ok(result as u8)
 }
 
 pub fn stop_movie() -> Result<bool, Error> {

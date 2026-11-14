@@ -178,6 +178,11 @@ fn builtin(name: &str, args: &[i64]) -> Option<i64> {
         "engine.movie_pause" => Some(i64::from(crate::menu_movie::pause())),
         "engine.movie_resume" => Some(i64::from(crate::menu_movie::resume())),
         "engine.loading_icon_only" => Some(i64::from(crate::menu_loading::icon_only())),
+        "engine.viewer_begin" => Some(crate::menu_viewer::begin(arg(0))),
+        "engine.viewer_state" => Some(crate::menu_viewer::state(arg(0))),
+        "engine.viewer_end" => Some(crate::menu_viewer::end()),
+        "engine.gallery_count" => Some(crate::menu_viewer::item_count()),
+        "engine.gallery_costume" => Some(crate::menu_viewer::item_costume(arg(0))),
         _ if name.starts_with(MODE_CALLS) || name == BUTTONS_CALL => crate::menu_modes::call(name, args),
         _ => None,
     }
@@ -286,7 +291,7 @@ unsafe extern "C" fn engine_text(state: usize) -> i32 {
             } else {
                 -1
             };
-            crate::menu_modes::text(&name, index)
+            crate::menu_modes::text(&name, index).or_else(|| crate::menu_viewer::text(&name, index))
         })
     };
     match text.and_then(|text| CString::new(text).ok()) {

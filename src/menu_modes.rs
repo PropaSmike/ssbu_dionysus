@@ -186,6 +186,10 @@ pub(crate) fn text(name: &str, index: i64) -> Option<String> {
     }
 }
 
+pub(crate) fn id_of(index: usize) -> Option<&'static str> {
+    modes().get(index).map(|entry| entry.mode.id.as_str())
+}
+
 pub(crate) fn sequence_of(id: &str) -> u32 {
     modes().iter().find(|entry| entry.mode.id == id).map_or_else(
         || crate::menu_sequences::code_of(dionysus_core::menu::call_hash(id) as u64).unwrap_or(0),

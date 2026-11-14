@@ -61,6 +61,18 @@ local function log(...)
   prg_func.engine_call("engine.log", ...)
 end
 
+local function decide_sound()
+  local ok, id = pcall(function()
+    return UI_SE_ID_DECIDE
+  end)
+  if ok and type(id) == "number" and pcall(UiSoundManager.play_se, id) then
+    return
+  end
+  pcall(function()
+    UiSoundManager:play_se_label("se_system_fixed_s")
+  end)
+end
+
 local function held(value)
   return value == true or value == 1
 end
@@ -495,6 +507,9 @@ end
 function modes:choose(entry)
   log("modes: choose " .. entry.id)
   local module = self:load(entry)
+  if module == nil then
+    decide_sound()
+  end
   if module ~= nil and module.enter ~= nil then
     self:enter(entry, false)
     return

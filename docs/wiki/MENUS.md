@@ -34,6 +34,7 @@ script = "menu/my_menu/my_other"
 | `[[preload]]` | Whenever the game requests `after`, it requests `files` as well |
 | `[[patch]]` | Whenever the game loads `module`, it runs `script` instead (see Patching a menu script) |
 | `[[mode]]` | A row on the modes page that starts your mode (see Modes) |
+| `[[gallery]]`, `[[gallery_item]]` | A row on the modes page that opens a page of 3D models (see Galleries) |
 
 ## Buttons
 
@@ -480,6 +481,125 @@ screen never decodes while the first exists, even stopped. The menu music keeps 
 `UiSoundManager:stop_bgm()` and bring it back with
 `UiSoundManager:play_menu_bgm()`.
 
+## Galleries
+
+A gallery is a page of 3D models, each with a name and a text. It gets a row
+on the modes page and needs no script.
+
+```toml
+[[gallery]]
+id = "my_gallery"
+name = "My Gallery"
+description = "One line for the modes page."
+
+[[gallery_item]]
+gallery = "my_gallery"
+fighter = "my_fighter"
+costume = 0
+name = "First Model"
+text = "Shown under the model."
+```
+
+| Key | What it does |
+|---|---|
+| `id`, `name`, `description`, `order` | As in `[[mode]]` |
+| `music` | Optional. A song id (`ui_bgm_...`, lower case) played while the page is open, from a music database (CSK `database/*.json`) |
+| `gallery` | The gallery's `id`; items may come from another pack |
+| `fighter` | A fighter or clone by name, with or without `ui_chara_` |
+| `costume` | 0 to 255, default 0 |
+| `name` | Up to 64 bytes |
+| `text` | Up to 1024 bytes; lines wrap, `\n` starts a new one |
+| `group` | Optional, up to 64 bytes. Consecutive items with the same group form a group in a grid skin |
+| `sources` | Optional, up to 256 bytes, one line per source. A line may end in a vertical bar and a tag, which picks an icon in a grid skin |
+
+Items are listed in the order declared. Each is a fighter's costume, so a clone
+holds up to 256 models; for a model that stays still, bind every vertex to
+`Trans`.
+
+### Backdrop
+
+The gallery runs on the Mii Fighters stage. While one is open the engine draws
+no floor, turns off the sun shaft and serves the sky from the pack; every
+other screen gets the game's own files. A pack's `gallery_backdrop/stc_skydome_set/`
+and `gallery_backdrop/stc_ring_set/` (the floor) hold files named as the
+stage's own (`model.numshb`, `.numatb`, `.numdlb`, `.numshexb`, `.nusrcmdlb`,
+`.nusktb`, and the sky's `settingstage_white_con.nutexb`) and replace them
+meanwhile. A set must be a complete model: a model list with no entries
+crashes the loader. A sky can be a far quad with an unlit `far` material and
+one picture (the camera looks down -Z from about 190 to 550 units, 0.17
+radians tall); keep the texture name.
+
+### Skins
+
+A second `[[layout]] scene = "gallery"` with the panes `skin_page` and
+`skin_view` is a grid skin: the page hides its own panels and only sets text
+and visibility on the skin's panes. The layout loader answers `get_pane` for
+any name, so a skin must have every pane below, at fixed sizes: 12 cells in 3
+columns, 9 description lines, 2 source rows. Keep the names as listed: one
+that begins with another's name gets the wrong pane.
+
+| Pane | Use |
+|---|---|
+| `skin_grid`, `skin_view` | The grid, and the view of one item |
+| `skin_cell_cursor_<k>` | k 0 to 11; shown on the selected cell |
+| `skin_cell_{label,small,tiny}_<k>` | The cell's item name: up to 14 bytes in label, 19 in small, more in tiny; the others are emptied |
+| `skin_thumb_<i>` | One picture per item, i from 1, at the cell its item takes (position in its group, modulo 12) |
+| `skin_grid_group`, `skin_grid_foot`, `skin_grid_page`, `skin_grid_total` | The group's name twice, `(page/pages)` of the group, `(items)` |
+| `skin_info`, `skin_angle`, `skin_help` | In `skin_view`: shown outside angle mode, in angle mode, in angle mode with help on |
+| `skin_help_text_<k>` | k 0 to 6: Rotate, Slide, Zoom in, Zoom out, Switch view, Back, Help: ON/OFF |
+| `skin_name`, `skin_mid_name`, `skin_tiny_name` | The item's name: up to 11 bytes in the first, 18 in the second, more in the third |
+| `skin_desc`, `skin_desc_page` | One page of `text`, and `(page/pages)` |
+| `skin_source_<k>`, `skin_source_text_<k>`, `skin_source_icon_<k>_<tag>` | k 0 and 1: shown when the item has that source line; the line without its tag; shown when its tag is `<tag>` |
+
+Items are grouped by `group` in the order declared; a group fills pages of 12.
+
+## Model viewer
+
+A mode can show a fighter in 3D inside a menu, with no battle behind it; the
+gallery is built on this. Give the `[[mode]]` `runs_as = "other_chara_make"`
+and patch `menu/chara_make/make_mii_select_actor` with a script like this (see
+Patching a menu script). The patch turns the Mii Fighters screen into the
+viewer only when the mode opened it; the real Mii Fighters menu is unchanged.
+
+```lua
+UiScriptPlayer.require("menu/chara_make/make_mii_select_actor")
+
+local call = UiScriptPlayer.engine_call
+local code = call("engine.sequence", "my_viewer")
+
+if code ~= 0 and call("engine.active_sequence") == code then
+  is_finished_in = function() return 1 end
+  get_exit_value = function() return -1 end
+  main = function()
+    ComFrameActor.hide_frame(true)
+    call("engine.viewer_begin", 0)
+    UiFighterManager.reload_fighter(FIGHTER_ENTRY_ID_SELF, "ui_chara_mario", 0)
+    repeat
+      coroutine.yield()
+    until call("engine.buttons") & 2 ~= 0
+    call("engine.viewer_end")
+    UiFighterManager.deactivate(FIGHTER_ENTRY_ID_SELF)
+    ComFrameActor.hide_frame(false)
+  end
+end
+```
+
+| Call | What it does |
+|---|---|
+| `engine.viewer_begin` | Readies slot 0 or 1 and hides the side panel. Returns 0, or -1 on a screen with no viewer |
+| `engine.viewer_state` | 0 loading, 1 built, 2 shown, -1 no viewer |
+| `engine.viewer_end` | Brings the side panel back |
+| `UiFighterManager.reload_fighter(entry, "ui_chara_name", costume)` | Loads a fighter into the slot |
+| `UiFighterManager.activate(entry)` | Shows it |
+| `UiFighterManager.set_fighter_rotation_by_degree(entry, x, y, z)` | Turns it |
+| `UiFighterManager.set_camera_pos(x, y, z, look_x, look_y, look_z, fov)` | Places the camera. A fighter fills the screen at (0, 8, 136.7) looking at (0, 8, 0), fov 0.17 |
+
+- The first fighter a slot loads must be a vanilla one: a clone crashes the
+  game there. Load a vanilla fighter, wait for state 1, leave it hidden, then
+  load the one to show.
+- Call `activate` once per load, only at state 1: during a load it crashes the
+  game.
+
 ## A page of your own
 
 A page is three main menu states (in, main, out) set up from a patch with
@@ -508,7 +628,7 @@ whose table entry has `state = <in id>`, and closed with `state:pop()`.
 ## From a plugin
 
 The menu template (`custom_menus/template`) is a complete pack with a plugin:
-every call below is in it.
+every call below is in it, except the viewer and gallery ones.
 
 ```rust
 use dionysus_api::menu;
@@ -542,6 +662,13 @@ menu::end_battle()?;
 menu::play_movie("stream:/movie/my_mod/intro.webm", 0)?;
 let playing = menu::movie_playing()?;
 menu::stop_movie()?;
+
+menu::viewer_begin(0)?;
+let shown = menu::viewer_state(0)? == menu::ViewerState::Shown;
+menu::viewer_end()?;
+
+let items = menu::gallery_item_count()?;
+let costume = menu::gallery_item_costume(0)?;
 ```
 
 During a battle, `next_battle` ends it and starts a new one from the current
@@ -568,6 +695,13 @@ a battle.
 per-battle setup on it rather than on `is_ready_go`, which a battle without
 "Ready" and "GO!" may never show false.
 
+`viewer_begin`, `viewer_state` and `viewer_end` are the `engine.viewer_*` calls
+of the Model viewer: slot 0 or 1, and a state of `Loading`, `Built` or `Shown`.
+`gallery_item_count` and `gallery_item_costume` read the open gallery's items.
+Each returns `Engine(-1)` on a screen with no viewer, with no gallery open or
+for an index past the last item. Call them from a menu call you registered, as
+the Lua ones run.
+
 Call names use letters, digits, `_` and `.`; `engine.` is reserved. The log
 tags are `[menuseq]`, `[menucall]`, `[menubattle]`, `[battlepause]`,
-`[battlemusic]` and `[menumovie]`.
+`[battlemusic]`, `[menumovie]` and `[menuviewer]`.

@@ -428,6 +428,16 @@ pub(crate) fn load_all() {
                 ),
             }
         }
+        for layout in &declaration.gallery_layouts {
+            let preload = menu::Preload {
+                after: menu::GALLERY_HOST_LAYOUT,
+                files: vec![menu::PreloadFile { hash: *layout, script: false }],
+            };
+            if let Err(refusal) = registry.add_preload(preload) {
+                skyline::println!("[menuseq] {directory}: gallery layout {layout:#012x} REFUSED ({refusal:?})");
+            }
+        }
+        crate::menu_viewer::declare(declaration.galleries, declaration.gallery_items, declaration.gallery_layouts, declaration.gallery_music);
         for mode in declaration.modes {
             let id = mode.id.clone();
             match registry.add_mode(mode) {

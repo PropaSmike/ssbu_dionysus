@@ -21,6 +21,12 @@ pub const MAX_PATCHES: usize = 64;
 pub const MAX_MODULE_NAME: usize = 200;
 pub const MAX_PATCH_DEPTH: usize = 8;
 pub const MAIN_MENU: &str = "main_menu";
+pub const GALLERY_SCENE: &str = "gallery";
+pub const GALLERY_HOST_LAYOUT: u64 = 0x39_d730_bdfa;
+pub const GALLERY_RUNS_AS: u32 = 0x0405_0000;
+pub const MAX_GALLERY_TEXT: usize = 1024;
+pub const MAX_GALLERY_SOURCES: usize = 256;
+pub const MAX_GALLERY_COSTUME: u64 = 255;
 pub const MAIN_MENU_LAYOUT: u64 = 0x2d_0e6e_5ffe;
 pub const MAX_CALL_ARGS: usize = 8;
 pub const MAX_CALLS: usize = 64;
@@ -418,6 +424,17 @@ impl Mode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GalleryItem {
+    pub gallery: String,
+    pub fighter: String,
+    pub costume: u8,
+    pub name: String,
+    pub text: String,
+    pub group: String,
+    pub sources: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MenuDeclaration {
     pub sequences: Vec<Sequence>,
@@ -428,6 +445,10 @@ pub struct MenuDeclaration {
     pub under_movies: Vec<u64>,
     pub patches: Vec<Patch>,
     pub modes: Vec<Mode>,
+    pub galleries: Vec<String>,
+    pub gallery_music: Vec<(String, String)>,
+    pub gallery_items: Vec<GalleryItem>,
+    pub gallery_layouts: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -618,6 +639,8 @@ enum Table {
     Layout,
     Patch,
     Mode,
+    Gallery,
+    GalleryItem,
 }
 
 struct Pending {
@@ -642,18 +665,55 @@ struct Pending {
     order: Option<u64>,
     skip: Vec<String>,
     after_battle: Option<String>,
+    gallery: Option<String>,
+    fighter: Option<String>,
+    costume: Option<u64>,
+    text: Option<String>,
+    group: Option<String>,
+    sources: Option<String>,
+    music: Option<String>,
 }
 
 fn strip_comment(line: &str) -> &str {
     let mut quoted = false;
+    let mut escaped = false;
     for (index, byte) in line.bytes().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
         match byte {
+            b'\\' if quoted => escaped = true,
             b'"' => quoted = !quoted,
             b'#' if !quoted => return &line[..index],
             _ => {}
         }
     }
     line
+}
+
+fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('"') => out.push('"'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 fn parse_value(raw: &str) -> Option<Value> {
@@ -670,7 +730,7 @@ fn parse_value(raw: &str) -> Option<Value> {
         return Some(Value::List(items));
     }
     if let Some(text) = raw.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
-        return Some(Value::Text(text.to_string()));
+        return Some(Value::Text(unescape(text)));
     }
     match raw {
         "true" => return Some(Value::Flag(true)),
@@ -733,13 +793,17 @@ fn finish(block: Pending, out: &mut MenuDeclaration) -> Result<(), MenuError> {
         Table::Layout => {
             let scene = block.scene.ok_or(MenuError::Missing { line, key: "scene" })?;
             let path = block.file.ok_or(MenuError::Missing { line, key: "file" })?;
-            if scene != MAIN_MENU {
+            if scene != MAIN_MENU && scene != GALLERY_SCENE {
                 return Err(MenuError::UnknownScene { line, scene });
             }
             if !path.trim().to_ascii_lowercase().ends_with("/layout.arc") {
                 return Err(MenuError::NotLayout { line, file: path });
             }
             let hash = file(&path).hash;
+            if scene == GALLERY_SCENE {
+                out.gallery_layouts.push(hash);
+                return Ok(());
+            }
             out.main_menu_layouts.push(hash);
             if block.over_side_panel {
                 out.over_side_panel.push(hash);
@@ -822,6 +886,76 @@ fn finish(block: Pending, out: &mut MenuDeclaration) -> Result<(), MenuError> {
                 flow,
             });
         }
+        Table::Gallery => {
+            let id = block.id.ok_or(MenuError::Missing { line, key: "id" })?.trim().to_string();
+            if !valid_mode_id(&id) {
+                return Err(MenuError::NotModeId { line, id });
+            }
+            let name = block.name.ok_or(MenuError::Missing { line, key: "name" })?.trim().to_string();
+            if name.is_empty() || name.len() > MAX_MODE_NAME {
+                return Err(MenuError::BadValue { line, key: "name".to_string() });
+            }
+            let description = block.description.unwrap_or_default().trim().to_string();
+            if description.len() > MAX_MODE_DESCRIPTION {
+                return Err(MenuError::BadValue { line, key: "description".to_string() });
+            }
+            if let Some(music) = block.music {
+                let music = music.trim().to_ascii_lowercase();
+                if music.is_empty() || music.len() > MAX_MODE_NAME || !music.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') {
+                    return Err(MenuError::BadValue { line, key: "music".to_string() });
+                }
+                out.gallery_music.push((id.clone(), music));
+            }
+            out.galleries.push(id.clone());
+            out.modes.push(Mode {
+                id,
+                name,
+                description,
+                script: None,
+                button: None,
+                runs_as: Some(GALLERY_RUNS_AS),
+                scene: None,
+                order: block.order.unwrap_or(0) as u32,
+                flow: Flow::default(),
+            });
+        }
+        Table::GalleryItem => {
+            let gallery = block.gallery.ok_or(MenuError::Missing { line, key: "gallery" })?.trim().to_string();
+            if !valid_mode_id(&gallery) {
+                return Err(MenuError::NotModeId { line, id: gallery });
+            }
+            let fighter = block.fighter.ok_or(MenuError::Missing { line, key: "fighter" })?;
+            let fighter = fighter.trim().to_ascii_lowercase();
+            if fighter.is_empty() || !fighter.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') {
+                return Err(MenuError::BadValue { line, key: "fighter".to_string() });
+            }
+            let fighter = if fighter.starts_with("ui_chara_") { fighter } else { format!("ui_chara_{fighter}") };
+            let name = block.name.ok_or(MenuError::Missing { line, key: "name" })?.trim().to_string();
+            if name.is_empty() || name.len() > MAX_MODE_NAME {
+                return Err(MenuError::BadValue { line, key: "name".to_string() });
+            }
+            let text = block.text.unwrap_or_default().trim().replace("\\n", "\n");
+            if text.len() > MAX_GALLERY_TEXT {
+                return Err(MenuError::BadValue { line, key: "text".to_string() });
+            }
+            let group = block.group.unwrap_or_default().trim().to_string();
+            if group.len() > MAX_MODE_NAME {
+                return Err(MenuError::BadValue { line, key: "group".to_string() });
+            }
+            let sources = block.sources.unwrap_or_default().trim().replace("\\n", "\n");
+            if sources.len() > MAX_GALLERY_SOURCES {
+                return Err(MenuError::BadValue { line, key: "sources".to_string() });
+            }
+            out.gallery_items.push(GalleryItem {
+                gallery,
+                fighter,
+                costume: block.costume.unwrap_or(0) as u8,
+                name,
+                text,
+                group,
+                sources,
+            });
+        }
     }
     Ok(())
 }
@@ -845,6 +979,8 @@ pub fn parse(text: &str) -> Result<MenuDeclaration, MenuError> {
                 "layout" => Table::Layout,
                 "patch" => Table::Patch,
                 "mode" => Table::Mode,
+                "gallery" => Table::Gallery,
+                "gallery_item" => Table::GalleryItem,
                 other => {
                     return Err(MenuError::UnknownTable {
                         line: number,
@@ -874,6 +1010,13 @@ pub fn parse(text: &str) -> Result<MenuDeclaration, MenuError> {
                 order: None,
                 skip: Vec::new(),
                 after_battle: None,
+                gallery: None,
+                fighter: None,
+                costume: None,
+                text: None,
+                group: None,
+                sources: None,
+                music: None,
             });
             continue;
         }
@@ -926,6 +1069,18 @@ pub fn parse(text: &str) -> Result<MenuDeclaration, MenuError> {
             }
             (Table::Mode, "scene", Value::Text(text)) => block.sequence_scene = Some(text.trim().to_string()),
             (Table::Mode, "order", Value::Number(n)) if n <= MAX_MODE_ORDER => block.order = Some(n),
+            (Table::Gallery, "id", Value::Text(text)) => block.id = Some(text),
+            (Table::Gallery, "name", Value::Text(text)) => block.name = Some(text),
+            (Table::Gallery, "description", Value::Text(text)) => block.description = Some(text),
+            (Table::Gallery, "order", Value::Number(n)) if n <= MAX_MODE_ORDER => block.order = Some(n),
+            (Table::Gallery, "music", Value::Text(text)) => block.music = Some(text),
+            (Table::GalleryItem, "gallery", Value::Text(text)) => block.gallery = Some(text),
+            (Table::GalleryItem, "fighter", Value::Text(text)) => block.fighter = Some(text),
+            (Table::GalleryItem, "costume", Value::Number(n)) if n <= MAX_GALLERY_COSTUME => block.costume = Some(n),
+            (Table::GalleryItem, "name", Value::Text(text)) => block.name = Some(text),
+            (Table::GalleryItem, "text", Value::Text(text)) => block.text = Some(text),
+            (Table::GalleryItem, "group", Value::Text(text)) => block.group = Some(text),
+            (Table::GalleryItem, "sources", Value::Text(text)) => block.sources = Some(text),
             (Table::Sequence, "id" | "code" | "runs_as" | "scene" | "skip" | "after_battle", _)
             | (Table::Preload, "after" | "files", _)
             | (Table::Layout, "scene" | "file" | "over_side_panel" | "under_movies", _)
@@ -934,7 +1089,9 @@ pub fn parse(text: &str) -> Result<MenuDeclaration, MenuError> {
                 Table::Mode,
                 "id" | "name" | "description" | "script" | "button" | "runs_as" | "scene" | "order" | "skip" | "after_battle",
                 _,
-            ) => {
+            )
+            | (Table::Gallery, "id" | "name" | "description" | "order" | "music", _)
+            | (Table::GalleryItem, "gallery" | "fighter" | "costume" | "name" | "text" | "group" | "sources", _) => {
                 return Err(bad())
             }
             _ => {}
@@ -1806,5 +1963,77 @@ scene = "IngameCallSequenceScene"
         assert_eq!(registry.files_after(0x2c_5acc_b787).len(), 2);
         assert_eq!(registry.files_after(0xff00_002c_5acc_b787).len(), 2);
         assert!(registry.files_after(0x20_e09f_c3fc).is_empty());
+    }
+
+    #[test]
+    fn a_gallery_is_a_mode_on_the_mii_screen_with_its_items() {
+        let parsed = parse(concat!(
+            "[[layout]]\nscene = \"gallery\"\nfile = \"ui/layout/menu/x/y/layout.arc\"\n",
+            "[[gallery]]\nid = \"shapes\"\nname = \"Shapes\"\norder = 4\n",
+            "[[gallery_item]]\ngallery = \"shapes\"\nfighter = \"viewerstand\"\ncostume = 8\nname = \"Gem\"\ntext = \"One\\nTwo\"\n",
+            "[[gallery_item]]\ngallery = \"shapes\"\nfighter = \"ui_chara_mario\"\nname = \"Mario\"\n",
+        ))
+        .unwrap();
+        assert_eq!(parsed.galleries, vec!["shapes".to_string()]);
+        assert!(parsed.gallery_music.is_empty());
+        assert_eq!(parsed.gallery_layouts.len(), 1);
+        assert!(parsed.main_menu_layouts.is_empty());
+        assert_eq!(parsed.modes[0].runs_as, Some(GALLERY_RUNS_AS));
+        assert_eq!(parsed.modes[0].order, 4);
+        assert_eq!(parsed.gallery_items[0].fighter, "ui_chara_viewerstand");
+        assert_eq!(parsed.gallery_items[0].costume, 8);
+        assert_eq!(parsed.gallery_items[0].text, "One\nTwo");
+        assert_eq!(parsed.gallery_items[1].fighter, "ui_chara_mario");
+        assert_eq!(parsed.gallery_items[1].costume, 0);
+        assert_eq!(parsed.gallery_items[1].group, "");
+        assert_eq!(parsed.gallery_items[1].sources, "");
+    }
+
+    #[test]
+    fn quoted_text_keeps_its_escaped_quotes_and_backslashes() {
+        let parsed = parse(concat!(
+            "[[gallery_item]]\ngallery = \"shapes\"\nfighter = \"mario\"\nname = \"M\"\n",
+            "text = \"called \\\"green mustache guy.\\\" # not a comment\\nnext\\\\line\" # a comment\n",
+        ))
+        .unwrap();
+        assert_eq!(parsed.gallery_items[0].text, "called \"green mustache guy.\" # not a comment\nnext\\line");
+    }
+
+    #[test]
+    fn a_gallery_may_name_its_music() {
+        let parsed = parse("[[gallery]]\nid = \"shapes\"\nname = \"Shapes\"\nmusic = \" UI_BGM_My_Song \"\n").unwrap();
+        assert_eq!(parsed.gallery_music, vec![("shapes".to_string(), "ui_bgm_my_song".to_string())]);
+        assert!(matches!(
+            parse("[[gallery]]\nid = \"shapes\"\nname = \"Shapes\"\nmusic = \"bad name\"\n"),
+            Err(MenuError::BadValue { .. })
+        ));
+    }
+
+    #[test]
+    fn a_gallery_item_may_carry_a_group_and_its_sources() {
+        let parsed = parse(concat!(
+            "[[gallery_item]]\ngallery = \"shapes\"\nfighter = \"mario\"\nname = \"M\"\n",
+            "group = \" Series \"\nsources = \"First\\nSecond\"\n",
+        ))
+        .unwrap();
+        assert_eq!(parsed.gallery_items[0].group, "Series");
+        assert_eq!(parsed.gallery_items[0].sources, "First\nSecond");
+        let long = format!(
+            "[[gallery_item]]\ngallery = \"a\"\nfighter = \"mario\"\nname = \"M\"\ngroup = \"{}\"\n",
+            "x".repeat(65)
+        );
+        assert!(matches!(parse(&long), Err(MenuError::BadValue { .. })));
+    }
+
+    #[test]
+    fn a_gallery_item_needs_its_keys_and_a_costume_in_range() {
+        assert!(matches!(
+            parse("[[gallery_item]]\nfighter = \"mario\"\nname = \"M\"\n"),
+            Err(MenuError::Missing { key: "gallery", .. })
+        ));
+        assert!(matches!(
+            parse("[[gallery_item]]\ngallery = \"a\"\nfighter = \"mario\"\nname = \"M\"\ncostume = 256\n"),
+            Err(MenuError::BadValue { .. })
+        ));
     }
 }

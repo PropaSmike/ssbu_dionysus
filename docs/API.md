@@ -776,7 +776,7 @@ and registers nothing. The old calls are in
 
 ## Menus
 
-`menu.toml` covers sequences, layouts, preloads and menu script patches; see
+`menu.toml` covers sequences, layouts, preloads, menu script patches and galleries; see
 [Menus](wiki/MENUS.md).
 
 | Function | Meaning |
@@ -799,6 +799,13 @@ and registers nothing. The old calls are in
 | `menu::battle_boss(Some(kind))` | Make the next battle a boss battle against boss item `kind` (a native boss or a boss family clone) on its stage; `None` turns it off. |
 | `menu::battle_boss_object()` | The boss's battle object id once the game made it. |
 | `menu::battle_boss_finished()` | The game counts the boss defeated. |
+| `menu::viewer_begin(slot)` | Readies viewer slot 0 or 1 on the Model viewer screen and hides its side panel. |
+| `menu::viewer_state(slot)` | `ViewerState::Loading`, `Built` or `Shown`. |
+| `menu::viewer_end()` | Brings the side panel back. |
+| `menu::gallery_item_count()` | Items in the open gallery. |
+| `menu::gallery_item_costume(index)` | Costume of item `index`, 0 to 255. |
+
+The viewer and gallery calls return `Error::Engine(-1)` on a screen with no viewer, with no gallery open or for an index past the last item; call them from a registered call. See [Model viewer](wiki/MENUS.md#model-viewer).
 
 A handler is `unsafe extern "C" fn(args: *const i64, count: usize) -> i64`.
 

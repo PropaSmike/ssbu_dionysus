@@ -174,6 +174,7 @@ fn scene_patch(hash: u64) -> Option<(String, String)> {
 unsafe fn scene_script(player: usize, files: usize, descriptor: usize, hash: u64, flags: u32) -> u64 {
     #[cfg(feature = "css_slot")]
     crate::starlight_bridge::arm();
+    let descriptor = crate::menu_viewer::scene_descriptor(hash, descriptor);
     let Some(patch) = scene_patch(hash) else {
         return call_original!(player, files, descriptor, hash, flags);
     };

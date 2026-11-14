@@ -142,6 +142,10 @@ mod menu_movie;
 mod menu_scripts;
 #[cfg(feature = "css_slot")]
 mod menu_sequences;
+#[cfg(feature = "css_slot")]
+mod menu_backdrop;
+#[cfg(feature = "css_slot")]
+mod menu_viewer;
 mod stage_move_floors;
 mod stage_motions;
 mod stage_gimmicks;
@@ -5012,6 +5016,8 @@ pub fn main() {
 
     #[cfg(feature = "css_slot")]
     fighter_packs::load_all();
+    #[cfg(feature = "css_slot")]
+    menu_backdrop::install();
     mount_events::subscribe();
 
     #[cfg(feature = "item_clone_backend")]
