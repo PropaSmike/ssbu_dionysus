@@ -77,6 +77,46 @@ struct CustomArticle {
     name_slot: usize,
     placement: ArticlePlacement,
     shared: bool,
+    original_code: bool,
+    original_kind: bool,
+    param_keys: Option<(u64, u64)>,
+    own_param_name: &'static [u8],
+}
+
+fn trimmed_text(bytes: &[u8]) -> Option<&str> {
+    core::str::from_utf8(bytes.strip_suffix(&[0]).unwrap_or(bytes)).ok()
+}
+
+unsafe fn param_keys(source_weapon_kind: i32, resource_owner: &[u8], name: &[u8]) -> Option<(u64, u64)> {
+    let source = table_string(LOWERCASE_WEAPON_NAMES, source_weapon_kind as usize)?.to_str().ok()?;
+    let owner = trimmed_text(resource_owner)?;
+    let name = trimmed_text(name)?;
+    Some((
+        dionysus_core::hash40(&format!("param_{source}")),
+        dionysus_core::hash40(&format!("param_{owner}_{name}")),
+    ))
+}
+
+pub fn own_param_remaps(resource_owner: &str) -> Vec<(u64, u64)> {
+    let Ok(registry) = registry().read() else {
+        return Vec::new();
+    };
+    let mut remaps: Vec<(u64, u64)> = Vec::new();
+    for article in registry
+        .iter()
+        .filter(|article| article.original_code && article.placement == ArticlePlacement::Static)
+    {
+        if trimmed_text(article.resource_owner_name) != Some(resource_owner) {
+            continue;
+        }
+        let Some((from, to)) = article.param_keys else {
+            continue;
+        };
+        if !remaps.iter().any(|(known, _)| *known == from) {
+            remaps.push((from, to));
+        }
+    }
+    remaps
 }
 
 fn registry() -> &'static RwLock<Vec<CustomArticle>> {
@@ -157,6 +197,49 @@ pub fn is_custom_weapon_kind(weapon_kind: i32) -> bool {
     row_of(weapon_kind).is_some()
 }
 
+fn article_flag(weapon_kind: i32, flag: fn(&CustomArticle) -> bool) -> bool {
+    if !is_custom_weapon_kind(weapon_kind) {
+        return true;
+    }
+    registry()
+        .read()
+        .ok()
+        .and_then(|registry| {
+            registry
+                .iter()
+                .find(|article| article.weapon_kind == weapon_kind)
+                .map(flag)
+        })
+        .unwrap_or(true)
+}
+
+pub fn runs_original_code(weapon_kind: i32) -> bool {
+    article_flag(weapon_kind, |article| article.original_code)
+}
+
+pub fn shows_original_kind(weapon_kind: i32) -> bool {
+    article_flag(weapon_kind, |article| article.original_kind)
+}
+
+pub fn always(_weapon_kind: i32) -> bool {
+    true
+}
+
+pub fn set_original(weapon_kind: i32, code: bool, kind: bool) -> bool {
+    let Ok(mut registry) = registry().write() else {
+        return false;
+    };
+    let Some(article) = registry
+        .iter_mut()
+        .find(|article| article.weapon_kind == weapon_kind)
+    else {
+        return false;
+    };
+    article.original_code = code;
+    article.original_kind = kind;
+    true
+}
+
 pub fn is_shared_weapon_kind(weapon_kind: i32) -> bool {
     row_of(weapon_kind).is_some()
         && registry().read().ok().is_some_and(|registry| {
@@ -235,7 +318,7 @@ pub fn custom_weapon_name(weapon_kind: i32) -> Option<&'static [u8]> {
     if !is_custom_weapon_kind(weapon_kind) {
         return None;
     }
-    if !assets_present(weapon_kind) {
+    if runs_original_code(weapon_kind) && !assets_present(weapon_kind) {
         return source_weapon_name(weapon_kind).map(|name| name.to_bytes_with_nul());
     }
     registry()
@@ -324,7 +407,7 @@ pub fn custom_weapon_owner_name(weapon_kind: i32) -> Option<&'static [u8]> {
     if !is_custom_weapon_kind(weapon_kind) {
         return None;
     }
-    if !assets_present(weapon_kind) {
+    if runs_original_code(weapon_kind) && !assets_present(weapon_kind) {
         return source_weapon_owner_name(weapon_kind).map(|name| name.to_bytes_with_nul());
     }
     registry()
@@ -365,11 +448,22 @@ pub fn is_source_of_custom_weapon(weapon_kind: i32) -> bool {
 }
 
 pub fn param_source_owner_kind(weapon_kind: i32) -> Option<i32> {
+    if !runs_original_code(weapon_kind) {
+        return None;
+    }
     let source_owner = source_weapon_owner_kind(weapon_kind)?;
     crate::fighter_params::kind_params_have_real_data(source_owner).then_some(source_owner)
 }
 
 pub fn param_lookup_weapon_name(weapon_kind: i32) -> Option<&'static [u8]> {
+    if !runs_original_code(weapon_kind) {
+        return registry()
+            .read()
+            .ok()?
+            .iter()
+            .find(|article| article.weapon_kind == weapon_kind)
+            .map(|article| article.own_param_name);
+    }
     if param_source_owner_kind(weapon_kind).is_some() {
         return source_weapon_name(weapon_kind).map(|name| name.to_bytes_with_nul());
     }
@@ -1050,6 +1144,16 @@ unsafe fn register_inner(
         return ERROR_ARTICLE_RESOURCE_CONFLICT;
     }
     let name_slot = Box::leak(Box::new(leaked_name.as_ptr())) as *const *const u8 as usize;
+    let param_keys = param_keys(source_weapon_kind, resource_owner_name, leaked_name);
+    let own_param_name: &'static [u8] = Box::leak(
+        format!(
+            "{}_{}\0",
+            trimmed_text(resource_owner_name).unwrap_or_default(),
+            trimmed_text(leaked_name).unwrap_or_default()
+        )
+        .into_bytes()
+        .into_boxed_slice(),
+    );
     registry.push(CustomArticle {
         weapon_kind,
         destination_kind,
@@ -1060,6 +1164,10 @@ unsafe fn register_inner(
         name_slot,
         placement,
         shared,
+        original_code: true,
+        original_kind: true,
+        param_keys,
+        own_param_name,
     });
     ROW_KINDS[row].store(weapon_kind, Ordering::Release);
     cell.store(row as u16 + 1, Ordering::Release);

@@ -442,6 +442,7 @@ unsafe fn ensure_clone(clone_kind: i32, base_kind: i32, entry_id: i32) -> Option
     }
     let record = crate::load_pipeline::resource_record_for_entry(entry_id)?;
     let built = build_instance(base_kind, directory_indices(record, clone_kind)?)?;
+    crate::article_params::serve_own_blocks(clone_kind, built.payload);
     state.payload.store(built.payload, Ordering::Relaxed);
     state.owner.store(built.owner, Ordering::Relaxed);
     state.payload_b.store(built.payload_b, Ordering::Relaxed);
@@ -461,6 +462,7 @@ unsafe fn capture_clone(state: &BaseState, clone_kind: i32, record: usize) {
         ));
         return;
     }
+    crate::article_params::serve_own_blocks(clone_kind, current.payload);
     slot.payload.store(current.payload, Ordering::Relaxed);
     slot.owner.store(current.owner, Ordering::Relaxed);
     slot.payload_b.store(current.payload_b, Ordering::Relaxed);

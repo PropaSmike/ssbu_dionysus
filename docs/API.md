@@ -96,6 +96,7 @@ or `Error::Engine(ERROR_MANIFEST)`; the log names the fault.
 | `owns_param_resources()`, `effect_namespace(n)`, `article_namespace(n)` | Leave out. |
 | `article(name, "fighter/weapon")` | Copy that vanilla weapon into `fighter/<name>/model/<article>`, scripts under `<name>_<article>`. |
 | `base_article(name, "weapon")` | Rename one of the base's own articles into that folder. |
+| `article_original_code(article, on)`, `article_original_kind(article, on)` | Whether an `article` runs its source's scripts and shows the game its source's weapon kind. See [Articles](wiki/ARTICLES_AND_KIRBY.md#the-sources-code). |
 | `kirby_article(name, "fighter/weapon")` | An article for Kirby's copy, files under `fighter/kirby/model/<name>/`, scripts under `kirby_<name>`. Ship a `cNN` folder for each costume and list it under `fighter/<clone>/kirbycopy/cNN`: the copied fighter's costume picks the folder, and without a loaded model the article is skipped. |
 | `kirby(statuses)`, `kirby_first(n)` | Reserve that many copy status numbers; the engine picks them and `kirby_status(n)` reads them. `kirby_first` pins the first, only for code that hard-codes them. |
 | `kirby_full_model()`, `kirby_model(dir)`, `kirby_mesh(name, visible)` | Full-body copy; one extra model folder under `fighter/kirby/model/`; a mesh's starting visibility (up to 16). |
@@ -219,6 +220,7 @@ With no plugin, drop `css = false` and add `series`, `disp_order`,
 | `display_name` | `name_label`. |
 | `css = false` | `own_css()`. |
 | `[[article]]` with `name`, `from` or `base_article`, `kirby = true` | `article`, `base_article`, `kirby_article`. |
+| `[[article]]` `original_code`, `original_kind` | `article_original_code(article, on)`, `article_original_kind(article, on)`. See [Articles](wiki/ARTICLES_AND_KIRBY.md#the-sources-code). |
 | `[[article.hurtbox]]` with `node`, `size`, `offset`, `offset2`, `part`, `height`, `status`, `shape` | `article_hurtbox(article, Hurtbox)`. See [Articles](wiki/ARTICLES_AND_KIRBY.md#hurtboxes). |
 | `[[article]]` `lvd`, `[[article.lvd_vertex]]` with `vertex`, `joint`, `offset`, `joint_left` | `article_lvd(article, ArticleLvd)`. See [Articles](wiki/ARTICLES_AND_KIRBY.md#platforms-on-any-article). |
 | `[kirby]` with `statuses`, `first`, `full_model`, `model`; `[[kirby.mesh]]` with `name`, `visible` | `kirby`, `kirby_first`, `kirby_full_model`, `kirby_model`, `kirby_mesh`. |

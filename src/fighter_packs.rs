@@ -412,6 +412,28 @@ mod live {
         Some(kind)
     }
 
+    fn set_original(directory: &str, minted: i32, article: &ArticleDeclaration) {
+        let mut code = article.runs_original_code();
+        let kind = article.shows_original_kind();
+        if code && kind {
+            return;
+        }
+        if !code && !crate::smashline_articles::numbering_shared() {
+            skyline::println!(
+                "[fighterpack] {directory}: article {} keeps its source's code: original_code = false needs Smashline 2 on game 13.0.5",
+                article.name
+            );
+            code = true;
+        }
+        crate::custom_articles::set_original(minted, code, kind);
+        skyline::println!(
+            "[fighterpack] {directory}: article {} runs {} and shows the game {}",
+            article.name,
+            if code { "its source's code under its own scripts" } else { "only its own scripts" },
+            if kind { "its source's weapon kind" } else { "its own weapon kind" }
+        );
+    }
+
     fn mint_article(
         directory: &str,
         kind: i32,
@@ -472,6 +494,7 @@ mod live {
                 article.name,
                 if article.kirby { " (Kirby copy)" } else { "" }
             );
+            set_original(directory, minted, article);
             if !article.hurtboxes.is_empty() {
                 match crate::article_hurtboxes::register(minted, &article.hurtboxes) {
                     Ok(count) => skyline::println!(

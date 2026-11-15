@@ -135,6 +135,9 @@ unsafe fn show_source(object: usize) {
     let Some(source) = custom_articles::custom_weapon_source_kind(minted) else {
         return;
     };
+    if !custom_articles::shows_original_kind(minted) {
+        return;
+    }
     remember(Shown { object, minted, source });
     write_kind(object, source);
     if SHOW_LOG.fetch_add(1, Ordering::Relaxed) < LOG_BUDGET {

@@ -4927,6 +4927,9 @@ mod arc_files;
 
 #[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
 mod fighter_params;
+
+#[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
+mod article_params;
 #[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
 mod fighter_common_copies;
 mod fighter_param_rows;

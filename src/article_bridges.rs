@@ -90,6 +90,18 @@ macro_rules! custom_article_agent_gate_hooks {
                 if custom_articles::is_custom_weapon_kind(weapon_kind) {
                     ctx.registers[23].set_x(0);
                 }
+                if let Some(minted) = crate::pending_weapon_kind()
+                    .filter(|minted| !custom_articles::runs_original_code(*minted))
+                {
+                    ctx.registers[23].set_x(1);
+                    static BLANK_LOG: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+                    if BLANK_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 8 {
+                        crate::dbg_log_public(&format!(
+                            "[articlecode] {:#x}: weapon kind {minted} has original_code = false; the game builds no agent for it, Smashline builds a blank one",
+                            $offset as usize
+                        ));
+                    }
+                }
             }
         )*
 
@@ -150,7 +162,8 @@ macro_rules! custom_article_owner_kind_hooks {
 
 #[cfg(feature = "css_slot")]
 fn weapon_owner_kind_for_params(weapon_kind: i32) -> Option<i32> {
-    if let Some(source_owner) = custom_articles::source_weapon_owner_kind(weapon_kind) {
+    let original = custom_articles::runs_original_code(weapon_kind);
+    if let Some(source_owner) = custom_articles::source_weapon_owner_kind(weapon_kind).filter(|_| original) {
         unsafe { crate::fighter_params::ensure_kind_params_loaded(source_owner) };
         if crate::fighter_params::kind_params_have_real_data(source_owner) {
             return Some(source_owner);
@@ -320,7 +333,9 @@ pub(crate) unsafe fn custom_article_weapon_record_base(ctx: &mut skyline::hooks:
         return;
     }
 
-    if let Some(owner) = custom_articles::source_weapon_owner_kind(weapon_kind) {
+    if let Some(owner) = custom_articles::source_weapon_owner_kind(weapon_kind)
+        .filter(|_| custom_articles::runs_original_code(weapon_kind))
+    {
         fighter_modules::ensure_loaded(owner, 20000);
     }
 
@@ -717,7 +732,8 @@ pub(crate) unsafe fn custom_article_owner_params(ctx: &mut skyline::hooks::Inlin
         ctx.registers[0].x() as usize,
     );
 
-    let owner = custom_articles::source_weapon_owner_kind(weapon_kind);
+    let owner = custom_articles::source_weapon_owner_kind(weapon_kind)
+        .filter(|_| custom_articles::runs_original_code(weapon_kind));
     let loaded = match owner {
         Some(owner) => crate::fighter_params::ensure_kind_params_loaded(owner),
         None => false,
@@ -810,14 +826,14 @@ pub(crate) unsafe fn custom_article_owner_category(ctx: &mut skyline::hooks::Inl
 }
 
 macro_rules! custom_article_source_kind_sites {
-    ($install:ident; $($name:ident($reg:expr, $offset:expr, $what:expr));* $(;)?) => {
+    ($install:ident, $gate:path; $($name:ident($reg:expr, $offset:expr, $what:expr));* $(;)?) => {
         $(
             #[doc = $what]
             #[cfg(feature = "css_slot")]
             #[skyline::hook(offset = crate::game::rel($offset), inline)]
             unsafe fn $name(ctx: &mut skyline::hooks::InlineCtx) {
                 let kind = ctx.registers[$reg].x() as i32;
-                if let Some(source) = custom_articles::custom_weapon_source_kind(kind) {
+                if let Some(source) = custom_articles::custom_weapon_source_kind(kind).filter(|_| $gate(kind)) {
                     ctx.registers[$reg].set_x(source as u64);
                     static SEEN: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
                     if SEEN.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 2 {
@@ -838,8 +854,12 @@ macro_rules! custom_article_source_kind_sites {
 }
 
 custom_article_source_kind_sites! {
-    install_custom_article_source_kind_sites;
+    install_custom_article_source_data_sites, custom_articles::always;
     custom_article_kind_table_452a(0, 0x33aa1e0, "per-kind table 0x452abd8");
+}
+
+custom_article_source_kind_sites! {
+    install_custom_article_source_kind_sites, custom_articles::shows_original_kind;
     custom_article_gbeam_owner_row(8, 0x34ed348, "gbeam param row: samusd's gbeam reads kind 4, any other kind 3");
     custom_article_hookshot_owner_row(8, 0x3522938, "hookshot param row: younglink's reads kind 23, any other kind 46");
     custom_article_whip_owner_row(12, 0x34f87c8, "whip param row: one of simon/richter by weapon kind");
@@ -2132,6 +2152,7 @@ pub(crate) fn install_custom_resource_name_hooks() {
     install_custom_article_scaled_owner_name_hooks();
     install_custom_article_agent_gate_hooks();
     install_custom_article_gate_base_hooks();
+    install_custom_article_source_data_sites();
     install_custom_article_source_kind_sites();
     skyline::install_hooks!(custom_article_kind_spec, custom_article_class_recache);
     crate::article_kind_facade::install();

@@ -382,6 +382,23 @@ impl Manifest {
         self
     }
 
+    pub fn article_original_code(self, article: &str, on: bool) -> Self {
+        self.article_line(article, format!("original_code = {on}"))
+    }
+
+    pub fn article_original_kind(self, article: &str, on: bool) -> Self {
+        self.article_line(article, format!("original_kind = {on}"))
+    }
+
+    fn article_line(mut self, article: &str, line: String) -> Self {
+        let name = format!("name = {}", quoted(article));
+        match self.articles.iter_mut().find(|lines| lines.first() == Some(&name)) {
+            Some(lines) => lines.push(line),
+            None => self.articles.push(vec![name, line]),
+        }
+        self
+    }
+
     pub fn kirby(mut self, statuses: i32) -> Self {
         self.kirby.push(format!("statuses = {statuses}"));
         self
@@ -1049,6 +1066,22 @@ mod tests {
         assert_eq!(fighter.articles[1].hurtboxes.len(), 2);
         assert_eq!(fighter.articles[1].hurtboxes[0], rock);
         assert_eq!(fighter.articles[1].hurtboxes[1].part, 4);
+    }
+
+    #[test]
+    fn article_original_keys_render_under_their_article_and_parse_back() {
+        let text = Manifest::new("wawa", "link")
+            .article("arrow", "link/bowarrow")
+            .article("ring", "link/boomerang")
+            .article_original_code("ring", false)
+            .article_original_kind("ring", true)
+            .to_toml();
+        assert!(text.contains("from = \"link/boomerang\"\noriginal_code = false\noriginal_kind = true\n"));
+        let fighter = &crate::fighter_toml::parse_all(&text).unwrap()[0];
+        assert!(fighter.articles[0].runs_original_code());
+        assert!(fighter.articles[0].shows_original_kind());
+        assert!(!fighter.articles[1].runs_original_code());
+        assert!(fighter.articles[1].shows_original_kind());
     }
 
     #[test]

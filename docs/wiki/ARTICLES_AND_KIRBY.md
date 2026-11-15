@@ -50,6 +50,33 @@ the original one does). On an article, `utility::get_kind` answers the source's 
 own. `article_kind_facade = false` in `sd:/ultimate/dionysus/settings.toml`
 turns this off.
 
+## The source's code
+
+By default an article runs its source's scripts under yours and shows the game
+its source's weapon kind. To turn either off:
+
+```toml
+[[article]]
+name = "arrow"
+from = "link/bowarrow"
+original_code = false   # only your scripts run, like Smashline's use_original_code = false
+original_kind = true    # the game still sees link/bowarrow's kind (default: original_code)
+```
+
+`original_code = false` needs Smashline 2 on game 13.0.5 and the article's own
+model and `motion_list.bin`; it is how an article written for Smashline's
+`use_original_code = false` ports. `original_kind = false` under the source's
+scripts can break sources that check their own kind; the linter names them.
+Neither applies to Kirby copy articles. In the manifest:
+`.article_original_code("arrow", false)`, `.article_original_kind("arrow", true)`.
+
+### Its own params
+
+Ship them in your `vl.prc` as `param_<fighter>_<article>`, for example
+`param_arrowlink_arrow`. Under the source's scripts, your fighter's lookups of
+the source's block (`param_bowarrow`) read yours instead, its own vanilla arrow
+included. Needs Smashline 2 on game 13.0.5.
+
 ## Articles with collision
 
 An article with an `.lvd` file keeps the base's file name inside your folder:

@@ -26,6 +26,8 @@ mod throws;
 // - sound/bank/fighter_voice/vc_template_fighter_cNN: the fighter's voice, on any base
 // - sound/bank/fighter_voice/vc_kirby_copy_template_fighter: Kirby's voice while he holds the copy
 // - fighter/template_fighter/append/cNN/: more files loaded for the match
+// - a param_template_fighter_template_fireball block in fighter/template_fighter/param/vl.prc:
+//   the fireball's own params, read in place of Mario's param_fireball (Smashline 2, game 13.0.5)
 // - finalsmash/template_fighter/shared/ and prebuilt;/movie/fighter/template_fighter/cNN/:
 //   the Final Smash background and movies, which the Final Smash statuses start
 // - ui/param/standard/standard_route_<name_label>.prc: the Classic Mode route
@@ -77,6 +79,8 @@ pub fn main() {
         "template_fireball",      // the article
         Hurtbox::new("rot", 2.5), // a joint of its model, radius: attacks can hit the fireball; its status scripts decide what a hit does
     )
+    // .article_original_code("template_fireball", false) // only your scripts run on it, like Smashline's use_original_code = false (Smashline 2, game 13.0.5)
+    // .article_original_kind("template_fireball", true)  // with the line above: the game still sees Mario's fireball kind
     .kirby_article("template_fighter_fireball", "mario/fireball") // the copy's own article, files under fighter/kirby/model/template_fighter_fireball
     .kirby(1)                                       // one status number for Kirby's copy
     .kirby_motion(

@@ -1749,7 +1749,7 @@ pub fn shared_hook_words(offset: u64) -> Option<[u32; 4]> {
 }
 
 pub fn article_kind(module_accessor: u64) -> i32 {
-    let Some(address) = resolve(&ARTICLE_KIND_FN, b"clone_engine_article_kind_v1 ") else {
+    let Some(address) = resolve(&ARTICLE_KIND_FN, b"clone_engine_article_kind_v1\0") else {
         return -1;
     };
     let function: ArticleOwnerKindFn = unsafe { std::mem::transmute(address) };

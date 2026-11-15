@@ -36,6 +36,18 @@ pub struct ArticleDeclaration {
     pub kirby: bool,
     pub hurtboxes: Vec<Hurtbox>,
     pub lvd: Option<ArticleLvd>,
+    pub original_code: Option<bool>,
+    pub original_kind: Option<bool>,
+}
+
+impl ArticleDeclaration {
+    pub fn runs_original_code(&self) -> bool {
+        self.original_code.unwrap_or(true)
+    }
+
+    pub fn shows_original_kind(&self) -> bool {
+        self.original_kind.unwrap_or_else(|| self.runs_original_code())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -470,6 +482,12 @@ pub fn parse(text: &str) -> Result<FighterDeclaration, ParseError> {
                     }
                     "base_article" => article.base_article = Some(unquote(value, line_number)?),
                     "kirby" => article.kirby = parse_bool(value, line_number, key)?,
+                    "original_code" => {
+                        article.original_code = Some(parse_bool(value, line_number, key)?)
+                    }
+                    "original_kind" => {
+                        article.original_kind = Some(parse_bool(value, line_number, key)?)
+                    }
                     "lvd" => {
                         article.lvd.get_or_insert_with(ArticleLvd::default).file =
                             unquote(value, line_number)?
@@ -660,6 +678,17 @@ fn finish(mut declaration: FighterDeclaration, saw_costumes: bool) -> Result<Fig
             return Err(error(
                 0,
                 format!("article {} has both from and base_article", article.name),
+            ));
+        }
+        if (article.original_code.is_some() || article.original_kind.is_some())
+            && (article.from.is_none() || article.kirby)
+        {
+            return Err(error(
+                0,
+                format!(
+                    "article {}: original_code and original_kind need from = \"fighter/weapon\" and no kirby = true",
+                    article.name
+                ),
             ));
         }
         if let Some(lvd) = &article.lvd {
@@ -1248,6 +1277,37 @@ scale = 0.95
         assert!(parse(&sizeless).unwrap_err().message.contains("size"));
         let unknown = format!("{head}[[article]]\nname = \"x\"\nfrom = \"mario/fireball\"\n[[article.hurtbox]]\nnode = \"hip\"\nsize = 1\nshape = \"cube\"\n");
         assert!(parse(&unknown).unwrap_err().message.contains("sphere, aabb, capsule"));
+    }
+
+    #[test]
+    fn article_original_code_and_kind_parse_and_default_together() {
+        let head = "name = \"wawa\"\nbase = \"link\"\n";
+        let plain = parse(&format!("{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\n")).unwrap();
+        assert!(plain.articles[0].runs_original_code());
+        assert!(plain.articles[0].shows_original_kind());
+        let blank = parse(&format!("{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\noriginal_code = false\n")).unwrap();
+        assert!(!blank.articles[0].runs_original_code());
+        assert!(!blank.articles[0].shows_original_kind());
+        let kind_only = parse(&format!(
+            "{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\noriginal_code = false\noriginal_kind = true\n"
+        ))
+        .unwrap();
+        assert!(!kind_only.articles[0].runs_original_code());
+        assert!(kind_only.articles[0].shows_original_kind());
+        let code_only = parse(&format!("{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\noriginal_kind = false\n")).unwrap();
+        assert!(code_only.articles[0].runs_original_code());
+        assert!(!code_only.articles[0].shows_original_kind());
+    }
+
+    #[test]
+    fn article_original_keys_are_refused_without_a_from_or_on_kirby_copies() {
+        let head = "name = \"wawa\"\nbase = \"link\"\n";
+        let renamed = format!("{head}[[article]]\nname = \"a\"\nbase_article = \"bowarrow\"\noriginal_code = false\n");
+        assert!(parse(&renamed).unwrap_err().message.contains("original_code and original_kind need from"));
+        let copy = format!("{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\nkirby = true\noriginal_kind = false\n");
+        assert!(parse(&copy).unwrap_err().message.contains("no kirby = true"));
+        let typo = format!("{head}[[article]]\nname = \"a\"\nfrom = \"link/bowarrow\"\noriginal_code = \"no\"\n");
+        assert!(parse(&typo).is_err());
     }
 
     #[test]
