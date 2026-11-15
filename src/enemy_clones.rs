@@ -12,6 +12,18 @@ const PATH_CLONE_REGISTER: usize = 3;
 const OFF_PATH_GUARD: usize = 0x17e_1dd0;
 const PATH_GUARD_OPCODE: u32 = 0x7100_143f;
 
+const OBJECT_ID: usize = 8;
+const OBJECT_KIND: usize = 0xc;
+const CATEGORY_SHIFT: u32 = 28;
+const ENEMY_CATEGORY: u32 = 2;
+const OFF_KIND_SWITCH: usize = 0x2f_9ef8;
+const KIND_SWITCH_OPCODE: u32 = 0x7100_111f;
+const KIND_SWITCH_KIND_REGISTER: usize = 8;
+const KIND_SWITCH_OBJECT_REGISTER: usize = 22;
+const OFF_AI_GET_KIND: usize = 0x37_68a0;
+const AI_GET_KIND_OPCODE: u32 = 0xf81e_0ff3;
+static BASE_CELLS: [u32; VANILLA_KINDS as usize] = [0, 1, 2, 3, 4];
+
 pub(crate) const REFUSED_BASE: i32 = -2;
 pub(crate) const REFUSED_NAME: i32 = -3;
 pub(crate) const REFUSED_FULL: i32 = -4;
@@ -182,11 +194,73 @@ path_name_sites! {
     path_sound_audio = 0x17e21ec, 0x910023f4;
 }
 
+pub(crate) fn enemy_base_of_id(id: u32, kind: u32) -> Option<u32> {
+    if id >> CATEGORY_SHIFT != ENEMY_CATEGORY || !INSTALLED.load(Ordering::Acquire) {
+        return None;
+    }
+    base_of(kind)
+}
+
+#[skyline::hook(offset = crate::game::rel(OFF_KIND_SWITCH), inline)]
+unsafe fn kind_switch(ctx: &mut skyline::hooks::InlineCtx) {
+    let object = ctx.registers[KIND_SWITCH_OBJECT_REGISTER].x() as usize;
+    if object == 0 {
+        return;
+    }
+    let id = core::ptr::read_volatile((object + OBJECT_ID) as *const u32);
+    if let Some(base) = enemy_base_of_id(id, ctx.registers[KIND_SWITCH_KIND_REGISTER].w()) {
+        ctx.registers[KIND_SWITCH_KIND_REGISTER].set_x(base as u64);
+    }
+}
+
+macro_rules! enemy_kind_loads {
+    ($($name:ident = $offset:literal, $register:literal, $opcode:literal;)*) => {
+        $(
+            #[skyline::hook(offset = crate::game::rel($offset), inline)]
+            unsafe fn $name(ctx: &mut skyline::hooks::InlineCtx) {
+                let object = ctx.registers[$register].x() as usize;
+                if object == 0 {
+                    return;
+                }
+                let id = core::ptr::read_volatile((object + OBJECT_ID) as *const u32);
+                let kind = core::ptr::read_volatile((object + OBJECT_KIND) as *const u32);
+                if let Some(cell) = enemy_base_of_id(id, kind).and_then(|base| BASE_CELLS.get(base as usize)) {
+                    ctx.registers[$register].set_x((cell as *const u32 as usize - OBJECT_KIND) as u64);
+                }
+            }
+        )*
+
+        const ENEMY_KIND_LOADS: &[(usize, u32)] = &[$(($offset, $opcode)),*];
+
+        fn install_enemy_kind_loads() {
+            skyline::install_hooks!($($name),*);
+        }
+    };
+}
+
+enemy_kind_loads! {
+    yellow_devil_test = 0x6c85b8, 25, 0xb9400f28;
+    flying_man_list_test = 0x30f7f4, 8, 0xb9400d08;
+    dark_emperor_record_test = 0x32d2a4, 14, 0xb9400dce;
+}
+
+#[skyline::hook(offset = crate::game::rel(OFF_AI_GET_KIND))]
+unsafe fn ai_get_kind(id: u32) -> i32 {
+    let kind = call_original!(id);
+    match enemy_base_of_id(id, kind as u32) {
+        Some(base) => base as i32,
+        None => kind,
+    }
+}
+
 pub(crate) fn install() {
     let sites = BASE_KIND_SITES
         .iter()
         .chain(PATH_NAME_SITES)
-        .chain(core::iter::once(&(OFF_PATH_GUARD, PATH_GUARD_OPCODE)));
+        .chain(core::iter::once(&(OFF_PATH_GUARD, PATH_GUARD_OPCODE)))
+        .chain(core::iter::once(&(OFF_KIND_SWITCH, KIND_SWITCH_OPCODE)))
+        .chain(ENEMY_KIND_LOADS)
+        .chain(core::iter::once(&(OFF_AI_GET_KIND, AI_GET_KIND_OPCODE)));
     for &(offset, expected) in sites {
         let observed = unsafe { crate::game::text_word(offset) };
         if observed != expected {
@@ -196,11 +270,12 @@ pub(crate) fn install() {
     }
     install_base_kind_sites();
     install_path_name_sites();
-    skyline::install_hooks!(path_guard);
+    skyline::install_hooks!(path_guard, kind_switch, ai_get_kind);
+    install_enemy_kind_loads();
     INSTALLED.store(true, Ordering::Release);
     skyline::println!(
-        "[enemyclone] {} kind sites and {} path sites patched",
-        BASE_KIND_SITES.len(),
+        "[enemyclone] {} kind sites and {} path sites patched; enemy kind tests and fighter AI see a clone's base",
+        BASE_KIND_SITES.len() + 1 + ENEMY_KIND_LOADS.len(),
         PATH_NAME_SITES.len() + 1
     );
 }

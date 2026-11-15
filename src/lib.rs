@@ -2512,6 +2512,20 @@ unsafe fn utility_get_kind_hook(boma: u64) -> i32 {
     }
     let kind = call_original!(boma);
 
+    #[cfg(all(feature = "item_clone_backend", feature = "css_slot"))]
+    if boma != 0
+        && kind >= 0
+        && enemy_clones::base_of(kind as u32).is_some()
+        && smash::app::utility::get_category(&mut *(boma as *mut smash::app::BattleObjectModuleAccessor))
+            == *smash::lib::lua_const::BATTLE_OBJECT_CATEGORY_ENEMY
+        && caller_is_outside_main_text(lr)
+        && stage_donor_tests::caller_is_fighter_script(lr)
+    {
+        if let Some(base) = enemy_clones::base_of(kind as u32) {
+            return base as i32;
+        }
+    }
+
     if boma != 0
         && smash::app::utility::get_category(&mut *(boma as *mut smash::app::BattleObjectModuleAccessor))
             == *smash::lib::lua_const::BATTLE_OBJECT_CATEGORY_FIGHTER

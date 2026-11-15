@@ -74,8 +74,16 @@ fn enemy_stage(offset: u64) -> bool {
     offset < ENEMY_STAGE_SPAN && ENEMY_STAGES >> offset & 1 != 0
 }
 
+pub(crate) fn gate_installed() -> bool {
+    ARMED.load(Ordering::Acquire)
+}
+
 #[skyline::hook(offset = crate::game::rel(OFF_STAGE_GATE), inline)]
 unsafe fn stage_gate(ctx: &mut skyline::hooks::InlineCtx) {
+    #[cfg(feature = "css_slot")]
+    if let Some(donor) = crate::stage_donor_tests::enemy_gate_offset(ctx.registers[GATE_REGISTER].w()) {
+        ctx.registers[GATE_REGISTER].set_x(donor as u64);
+    }
     if KINDS.load(Ordering::Acquire) == 0 {
         return;
     }

@@ -769,6 +769,9 @@ base = "nabbit"     # yellow_devil, dark_emperor, flying_man, metal_face or nabb
   and drives it, as the enemy template does; the Workbench writes that code.
 - Its `motion_list.bin` names its own folder at offset 8
   (`hash40("enemy/<name>/motion/body/c00")`), or it plays the base's animations.
+- The game's tests for one enemy (Yellow Devil, Dark Emperor, Flying Man),
+  CPU fighters and fighter scripts (`utility::get_kind`) see a clone as its
+  base. A plugin's `utility::get_kind` answers the clone's own kind.
 
 ## Stages
 

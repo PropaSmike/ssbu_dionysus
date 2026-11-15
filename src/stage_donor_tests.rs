@@ -5,6 +5,10 @@ const VANILLA_STAGE_IDS: u32 = 364;
 const STAGE_ID_GETTER: usize = 0x25d5d60;
 const STAGE_RANDOM_SETTINGS: usize = 0x177a980;
 const STAGE_RANDOM_SETTINGS_OPCODE: u32 = 0xfc190fe8;
+const ENEMY_STAGE_FIRST: u32 = 0xc5;
+const ENEMY_STAGE_SECOND: usize = 0x134b0b8;
+const ENEMY_STAGE_SECOND_OPCODE: u32 = 0x51031508;
+const ENEMY_STAGE_SECOND_REGISTER: usize = 8;
 const STAGE_ID_FIELD: usize = 8;
 const LUA2CPP_PREFIX: &[u8] = b"_ZN7lua2cpp";
 const NRO_MOD0_AT: usize = 4;
@@ -71,6 +75,8 @@ static DONOR_IDS: [u32; VANILLA_STAGE_IDS as usize] = identity_ids();
 static MODULES: RwLock<Vec<(usize, usize, bool)>> = RwLock::new(Vec::new());
 static ANSWER_LOG: AtomicU32 = AtomicU32::new(0);
 static RANDOM_LOG: AtomicU32 = AtomicU32::new(0);
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+static GATE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 const fn identity_ids() -> [u32; VANILLA_STAGE_IDS as usize] {
     let mut ids = [0u32; VANILLA_STAGE_IDS as usize];
@@ -149,7 +155,7 @@ unsafe fn defines_lua2cpp(base: usize, end: usize) -> bool {
     false
 }
 
-unsafe fn caller_is_fighter_script(lr: usize) -> bool {
+pub(crate) unsafe fn caller_is_fighter_script(lr: usize) -> bool {
     if let Ok(modules) = MODULES.read() {
         if let Some((_, _, fighter)) = modules.iter().find(|(base, end, _)| (*base..*end).contains(&lr)) {
             return *fighter;
@@ -196,6 +202,41 @@ unsafe extern "C" fn stage_id(stage: usize) -> u32 {
         ));
     }
     donor
+}
+
+pub(crate) fn enemy_gate_offset(offset: u32) -> Option<u32> {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return None;
+    }
+    let id = offset.wrapping_add(ENEMY_STAGE_FIRST);
+    if id < VANILLA_STAGE_IDS {
+        return None;
+    }
+    let donor = crate::stage_dispatch::donor_for(id)?;
+    if !GATE_LOGGED.swap(true, Ordering::Relaxed) {
+        crate::dbg_log_public(&format!(
+            "[stagedonor] stage id {id} answers its donor {donor} to the enemy stage test"
+        ));
+    }
+    Some(donor.wrapping_sub(ENEMY_STAGE_FIRST))
+}
+
+#[skyline::hook(offset = crate::game::rel(ENEMY_STAGE_SECOND), inline)]
+unsafe fn enemy_stage_second(ctx: &mut skyline::hooks::InlineCtx) {
+    let id = ctx.registers[ENEMY_STAGE_SECOND_REGISTER].w();
+    if let Some(offset) = enemy_gate_offset(id.wrapping_sub(ENEMY_STAGE_FIRST)) {
+        ctx.registers[ENEMY_STAGE_SECOND_REGISTER].set_x(offset.wrapping_add(ENEMY_STAGE_FIRST) as u64);
+    }
+}
+
+#[cfg(feature = "item_clone_backend")]
+fn enemy_gate_hooked() -> bool {
+    crate::enemy_spawn::gate_installed()
+}
+
+#[cfg(not(feature = "item_clone_backend"))]
+fn enemy_gate_hooked() -> bool {
+    false
 }
 
 #[skyline::hook(offset = crate::game::rel(STAGE_RANDOM_SETTINGS))]
@@ -261,8 +302,7 @@ macro_rules! stage_donor_sites {
 
 stage_donor_sites! {
     install_inline_sites;
-    id_range_197_228_a(8, 0x134b094, 0x51031508);
-    id_range_197_228_b(8, 0x134b0b8, 0x51031508);
+    enemy_stage_first(8, 0x134b094, 0x51031508);
     final_battle(8, 0x14e8480, 0x7105091f);
     item_stages_a(8, 0x160b7b8, 0x7101d91f);
     item_stages_b(8, 0x160b8ec, 0x7101d91f);
@@ -345,7 +385,18 @@ pub(crate) fn install() {
             replaced += 1;
         }
     }
-    let inline = install_inline_sites() + install_load_sites();
+    let mut inline = install_inline_sites() + install_load_sites();
+    INSTALLED.store(true, Ordering::Release);
+    let gate = if enemy_gate_hooked() {
+        "the enemy spawner's stage gate"
+    } else if unsafe { crate::game::text_word(ENEMY_STAGE_SECOND) } == ENEMY_STAGE_SECOND_OPCODE {
+        skyline::install_hooks!(enemy_stage_second);
+        inline += 1;
+        "its own hook"
+    } else {
+        "nothing (the site holds another instruction)"
+    };
+    skyline::println!("[stagedonor] the second enemy stage test goes through {gate}");
     let random = unsafe { crate::game::text_word(STAGE_RANDOM_SETTINGS) } == STAGE_RANDOM_SETTINGS_OPCODE;
     if random {
         skyline::install_hooks!(stage_random_settings);
