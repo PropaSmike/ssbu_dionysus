@@ -1,4 +1,6 @@
-use dionysus_core::csk_database::{chara_disp_orders, prc_disp_orders, translate_disp_order, vanilla_disp_orders};
+use dionysus_core::csk_database::{
+    chara_disp_orders, prc_disp_orders, prc_duplicate_rows, translate_disp_order, vanilla_disp_orders,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -76,6 +78,11 @@ fn json_orders() -> HashMap<u64, i8> {
 }
 
 fn table_orders(bytes: &[u8], source: &str) -> Option<HashMap<u64, i8>> {
+    for (ui_chara, name, count) in prc_duplicate_rows(bytes).unwrap_or_default() {
+        crate::dbg_log_public(&format!(
+            "[cskorder] {source} lists {name:?} ({ui_chara:#x}) {count} times; its first row counts, as in the game. Two mods both add this fighter: keep one row"
+        ));
+    }
     match prc_disp_orders(bytes) {
         Ok(found) => Some(found.into_iter().collect()),
         Err(error) => {

@@ -330,10 +330,40 @@ pub fn prc_disp_orders(bytes: &[u8]) -> Result<Vec<(u64, i8)>, crate::prc::PrcEr
         else {
             continue;
         };
-        orders.retain(|(known, _)| *known != ui_chara);
+        if orders.iter().any(|(known, _)| *known == ui_chara) {
+            continue;
+        }
         orders.push((ui_chara, order));
     }
     Ok(orders)
+}
+
+pub fn prc_duplicate_rows(bytes: &[u8]) -> Result<Vec<(u64, String, usize)>, crate::prc::PrcError> {
+    let root = crate::prc::parse(bytes)?;
+    let rows = root
+        .get(hash40("db_root"))
+        .and_then(crate::prc::Param::list)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let mut seen: Vec<(u64, String, usize)> = Vec::new();
+    for row in rows {
+        let Some(ui_chara) = row.get(hash40("ui_chara_id")).and_then(crate::prc::Param::hash) else {
+            continue;
+        };
+        match seen.iter_mut().find(|(known, _, _)| *known == ui_chara) {
+            Some((_, _, count)) => *count += 1,
+            None => {
+                let name = row
+                    .get(hash40("name_id"))
+                    .and_then(crate::prc::Param::text)
+                    .unwrap_or_default()
+                    .to_string();
+                seen.push((ui_chara, name, 1));
+            }
+        }
+    }
+    seen.retain(|(_, _, count)| *count > 1);
+    Ok(seen)
 }
 
 pub const VANILLA_DISP_ORDERS: &[(&str, i8)] = &[
@@ -535,9 +565,30 @@ mod tests {
             orders,
             vec![
                 (hash40("ui_chara_mario"), 0),
+                (hash40("ui_chara_mecha"), 6),
                 (hash40("ui_chara_latiicebeam"), -1),
-                (hash40("ui_chara_mecha"), 7),
             ]
+        );
+    }
+
+    #[test]
+    fn a_row_listed_twice_keeps_its_first_order_and_is_reported() {
+        let root = Param::Struct(vec![(
+            hash40("db_root"),
+            Param::List(vec![
+                chara_row("ui_chara_vegeta", Some(115)),
+                chara_row("ui_chara_mario", Some(0)),
+                chara_row("ui_chara_vegeta", Some(-1)),
+            ]),
+        )]);
+        let bytes = write(&root);
+        assert_eq!(
+            prc_disp_orders(&bytes).unwrap(),
+            vec![(hash40("ui_chara_vegeta"), 115), (hash40("ui_chara_mario"), 0)]
+        );
+        assert_eq!(
+            prc_duplicate_rows(&bytes).unwrap(),
+            vec![(hash40("ui_chara_vegeta"), "x".to_string(), 2)]
         );
     }
 

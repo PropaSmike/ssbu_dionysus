@@ -38,6 +38,13 @@ static ENTRY_RECOVERY_REFUSED_LOG: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
 #[cfg(feature = "css_slot")]
+static RECORD_CLONE_BASE: [core::sync::atomic::AtomicI32; 8] =
+    [const { core::sync::atomic::AtomicI32::new(-1) }; 8];
+
+#[cfg(feature = "css_slot")]
+static RECORD_CLONE_LOG: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "css_slot")]
 pub(crate) fn entry_selection_observed(entry_id: u8) -> bool {
     if entry_id >= 8 {
         return false;
@@ -201,6 +208,28 @@ unsafe fn rewritten_record_kind(
 }
 
 #[cfg(feature = "css_slot")]
+unsafe fn record_clone_over_base(entry_id: u8, source: *const u8, input_kind: i32, site: &'static str) -> Option<i32> {
+    let slot = RECORD_CLONE_BASE.get(entry_id as usize)?;
+    let found = record_clone_definition(source).filter(|definition| {
+        input_kind == definition.base_kind
+            && costume_in_css_colours(definition, core::ptr::read_volatile(source.add(ENTRY_RECORD_COSTUME)))
+    });
+    let Some(definition) = found else {
+        slot.store(-1, core::sync::atomic::Ordering::SeqCst);
+        return None;
+    };
+    slot.store(input_kind, core::sync::atomic::Ordering::SeqCst);
+    cache_custom_entry_selection(entry_id as i32, Some(definition.kind));
+    if RECORD_CLONE_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 8 {
+        crate::dbg_log_public(&format!(
+            "[csscache] entry={entry_id} record names clone kind {} and the game resolved its base {input_kind} (no CSS pick, as in a replay); kind {} site={site}",
+            definition.kind, definition.kind
+        ));
+    }
+    Some(definition.kind)
+}
+
+#[cfg(feature = "css_slot")]
 pub(crate) fn validated_entry_custom_kind(
     entry_id: u8,
     input_kind: i32,
@@ -211,6 +240,11 @@ pub(crate) fn validated_entry_custom_kind(
         record.and_then(|source| unsafe { rewritten_record_kind(entry_id, source, site) })
     {
         return kind;
+    }
+    if let Some(kind) =
+        record.and_then(|source| unsafe { record_clone_over_base(entry_id, source, input_kind, site) })
+    {
+        return Some(kind);
     }
     let Some(custom_kind) = entry_custom_kind(entry_id) else {
         if input_kind != 0 {
@@ -259,6 +293,13 @@ pub(crate) fn validated_entry_custom_kind(
         return Some(recovered);
     };
     if input_kind == 0 || input_kind == custom_kind {
+        return Some(custom_kind);
+    }
+    if record.is_none()
+        && RECORD_CLONE_BASE
+            .get(entry_id as usize)
+            .is_some_and(|base| base.load(core::sync::atomic::Ordering::SeqCst) == input_kind)
+    {
         return Some(custom_kind);
     }
 
