@@ -22,6 +22,7 @@ pub struct Settings {
     pub gliding: bool,
     pub stage_select_ui: StageSelectUi,
     pub article_kind_facade: bool,
+    pub stage_donor_tests: bool,
 }
 
 impl Default for Settings {
@@ -30,6 +31,7 @@ impl Default for Settings {
             gliding: true,
             stage_select_ui: StageSelectUi::Vanilla,
             article_kind_facade: true,
+            stage_donor_tests: true,
         }
     }
 }
@@ -84,6 +86,13 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     index + 1
                 )),
             },
+            "stage_donor_tests" => match flag(value) {
+                Some(on) => settings.stage_donor_tests = on,
+                None => problems.push(format!(
+                    "line {}: stage_donor_tests = {value} is not true or false; ignored",
+                    index + 1
+                )),
+            },
             _ => problems.push(format!("line {}: unknown setting {key}; ignored", index + 1)),
         }
     }
@@ -103,6 +112,13 @@ mod tests {
 ");
         assert!(settings.article_kind_facade);
         assert_eq!(problems.len(), 1);
+    }
+
+    #[test]
+    fn stages_answer_their_donors_tests_unless_turned_off() {
+        assert!(Settings::default().stage_donor_tests);
+        assert!(!parse("stage_donor_tests = false
+").0.stage_donor_tests);
     }
 
     #[test]

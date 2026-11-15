@@ -152,6 +152,8 @@ mod stage_gimmicks;
 mod stage_csk_table;
 mod stage_db_rows;
 mod stage_dispatch;
+#[cfg(feature = "css_slot")]
+mod stage_donor_tests;
 mod stage_ledger;
 mod stage_music;
 mod stage_packs;
@@ -5095,6 +5097,8 @@ pub fn main() {
 
     #[cfg(feature = "stage_mint_places")]
     stage_dispatch::install();
+    #[cfg(all(feature = "stage_mint_places", feature = "css_slot"))]
+    stage_donor_tests::install();
     stage_collision_probe::install();
 
     #[cfg(feature = "stage_mint")]

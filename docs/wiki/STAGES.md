@@ -27,6 +27,13 @@ bgm_setting_no = 0                # its column, 0 to 15
 Pack Workbench keys, ignored by the engine. Always set `content_donor_tree`
 with `content_donor`.
 
+A stage with `donor` also answers as its donor wherever the game or a fighter
+tests for one particular stage (a camera, an item rule, a Final Smash on
+Mishima Dojo) and when the match draws its random setup (Minecraft World,
+Super Mario Maker). Everything else still sees your stage's own id: its
+files, name and records. `stage_donor_tests = false` in
+`sd:/ultimate/dionysus/settings.toml` turns this off.
+
 ## Past 121 stages
 
 The game has 121 stage buttons. Dionysus adds more, up to 255, for any stage
