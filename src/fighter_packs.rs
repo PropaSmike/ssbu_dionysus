@@ -360,6 +360,17 @@ mod live {
                 ),
             }
         }
+        if let Some(choice) = declaration.item_hand {
+            match crate::item_hand::register(kind, &declaration.base, choice) {
+                Ok(()) => skyline::println!(
+                    "[fighterpack] {directory}: {name} holds items in the {} hand",
+                    choice.name()
+                ),
+                Err(message) => skyline::println!(
+                    "[fighterpack] {directory}: {name} item_hand REFUSED: {message}"
+                ),
+            }
+        }
         if let Some(list) = &declaration.move_list {
             match crate::move_list::register(&declaration.ui_chara(), list) {
                 Ok(pages) => skyline::println!(

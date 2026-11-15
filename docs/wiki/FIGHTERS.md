@@ -646,6 +646,22 @@ switch = ["my_other_fighter", "my_third_fighter"]   # on bases pikachu and luigi
 - A fighter on a Pyra, Mythra or Trainer base without `switch` plays alone:
   down special does nothing, and Charizard keeps his tail fire.
 
+## Item hand
+
+`item_hand = "left"` or `"right"` (`Manifest::item_hand`) picks the hand your
+fighter holds items in. The base keeps its own, in the same match too.
+
+- Held items, thrown items and the hitboxes of swung items (the
+  `commonhave` joint) move to `HaveL` or `HaveR`.
+- A base whose hold data names both hands (Link, Toon Link, Hero, Byleth,
+  Steve) has the two swapped.
+- A base that holds items in its mouth (Pikachu, Pichu, Squirtle, Mewtwo,
+  Duck Hunt) holds them in the chosen hand.
+- The base's animations still close its own hand around the grip. Animate
+  the other hand for a clean grip.
+- Every base but Ivysaur has both bones; on `pfushigisou` the key is
+  refused. A skeleton of your own needs the bone.
+
 ## Voice
 
 Any fighter can have a voice, even on a voiceless base (Pac-Man, Villager,

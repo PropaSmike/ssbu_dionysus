@@ -19,6 +19,7 @@ pub mod hud;
 pub mod item_common_row;
 pub mod item_common_row_table;
 pub mod item_generate;
+pub mod item_hand;
 pub mod item_kinds;
 pub mod manifest;
 pub mod manifest_builder;

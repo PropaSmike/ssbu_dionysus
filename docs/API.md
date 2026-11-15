@@ -89,6 +89,7 @@ or `Error::Engine(ERROR_MANIFEST)`; the log names the fault.
 | `name_label(s)`, `series(s)`, `disp_order(n)`, `save_no(n)`, `exhibit_year(n)` | Character select entry. `name_label` is the suffix of your `nam_chr*_00_<x>` labels; defaults to `name`. |
 | `narration(label)` | Announcer call, `vc_narration_characall_<name>`. |
 | `staffroll()` | Serve `standard/staffroll/texture/standard_staffroll_<name>.nutexb` from the pack. |
+| `item_hand(hand)` | `"left"` or `"right"`: the hand that holds, throws and swings items. See [Item hand](wiki/FIGHTERS.md#item-hand). |
 | `own_css()` | Do not publish the select entry; the pack's CSK code does, with `hash40("fighter_kind_<name>")` and `hash40("ui_chara_<name>")`. |
 | `jingle(name)` | Accepted, not served yet. |
 | `ui_chara(s)`, `fighter_kind_name(s)`, `resource_name(s)`, `base_resource_name(s)` | Override the names derived from `name` and `base`. |
@@ -214,7 +215,7 @@ With no plugin, drop `css = false` and add `series`, `disp_order`,
 
 | Key | `Manifest` method |
 |---|---|
-| `name`, `base`, `costumes`, `color_start`, `series`, `disp_order`, `save_no`, `exhibit_year`, `narration`, `staffroll`, `jingle`, `ui_chara`, `fighter_kind_name`, `resource_name`, `base_resource_name` | Same name. |
+| `name`, `base`, `costumes`, `color_start`, `series`, `disp_order`, `save_no`, `exhibit_year`, `narration`, `staffroll`, `item_hand`, `jingle`, `ui_chara`, `fighter_kind_name`, `resource_name`, `base_resource_name` | Same name. |
 | `display_name` | `name_label`. |
 | `css = false` | `own_css()`. |
 | `[[article]]` with `name`, `from` or `base_article`, `kirby = true` | `article`, `base_article`, `kirby_article`. |

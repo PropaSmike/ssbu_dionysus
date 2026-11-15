@@ -2083,6 +2083,7 @@ unsafe fn clone_fighter_status_create(object: u64, boma: u64, lua_state: u64) ->
     common_vtables::on_fighter_agent(object, result);
     final_grafts::on_status_agent(object, boma, lua_state, result, status_clone_kind);
     tether::on_status_agent(boma, status_clone_kind);
+    item_hand::on_status_agent(boma, status_clone_kind);
     result
 }
 
@@ -4910,6 +4911,8 @@ mod fighter_change;
 mod final_grafts;
 #[cfg(feature = "css_slot")]
 mod tether;
+#[cfg(feature = "css_slot")]
+mod item_hand;
 
 #[cfg(feature = "css_slot")]
 mod css_registration;
@@ -5049,6 +5052,8 @@ pub fn main() {
     final_grafts::install_hooks();
     #[cfg(feature = "css_slot")]
     tether::install();
+    #[cfg(feature = "css_slot")]
+    item_hand::install();
     #[cfg(feature = "item_clone_backend")]
     if item_slots::ready() {
         item_clones::mark_resource_router_ready();

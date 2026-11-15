@@ -84,6 +84,7 @@ pub struct FighterDeclaration {
     pub exhibit_year: Option<i16>,
     pub narration: Option<String>,
     pub staffroll: bool,
+    pub item_hand: Option<crate::item_hand::ItemHand>,
     pub own_css: bool,
     pub jingle: Option<String>,
     pub owns_param_resources: bool,
@@ -428,6 +429,12 @@ pub fn parse(text: &str) -> Result<FighterDeclaration, ParseError> {
                 }
                 "narration" => declaration.narration = Some(unquote(value, line_number)?),
                 "staffroll" => declaration.staffroll = parse_bool(value, line_number, key)?,
+                "item_hand" => {
+                    let text = unquote(value, line_number)?;
+                    declaration.item_hand = Some(crate::item_hand::ItemHand::parse(&text).ok_or_else(|| {
+                        error(line_number, "item_hand must be \"left\" or \"right\"")
+                    })?);
+                }
                 "partner" if value.starts_with('"') => {
                     declaration.partner_with = Some(unquote(value, line_number)?);
                     declaration.partner = Some(true);
@@ -1198,6 +1205,16 @@ scale = 0.95
         assert_eq!(failure.message, "disp_order 128 is out of range");
         let failure = parse("name = \"wawa\"\nbase = \"samus\"\ndisp_order = forty\n").unwrap_err();
         assert_eq!(failure.message, "disp_order must be a whole number");
+    }
+
+    #[test]
+    fn item_hand_takes_left_or_right() {
+        let fighter = parse("name = \"wawa\"\nbase = \"luigi\"\nitem_hand = \"left\"\n").unwrap();
+        assert_eq!(fighter.item_hand, Some(crate::item_hand::ItemHand::Left));
+        assert_eq!(parse("name = \"wawa\"\nbase = \"luigi\"\n").unwrap().item_hand, None);
+        let failure = parse("name = \"wawa\"\nbase = \"luigi\"\nitem_hand = \"havel\"\n").unwrap_err();
+        assert_eq!(failure.line, 3);
+        assert_eq!(failure.message, "item_hand must be \"left\" or \"right\"");
     }
 
     #[test]

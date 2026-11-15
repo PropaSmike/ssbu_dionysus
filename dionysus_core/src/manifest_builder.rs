@@ -294,6 +294,10 @@ impl Manifest {
         self.number("staffroll", true)
     }
 
+    pub fn item_hand(self, hand: &str) -> Self {
+        self.text("item_hand", hand)
+    }
+
     pub fn partner(self, enabled: bool) -> Self {
         self.number("partner", enabled)
     }
@@ -1000,6 +1004,14 @@ mod tests {
         assert_eq!(fighter.command_settings.stick_range, Some(kazuya));
         assert_eq!(fighter.commands[0], Command::new("geyser", "21416").button(Button::Special).super_command().reverse().cpu(0.3));
         assert_eq!(fighter.commands[1], Command::new("dash", "656").button(Button::None).life(8).neutral_resets(false));
+    }
+
+    #[test]
+    fn item_hand_renders_and_parses_back() {
+        let text = Manifest::new("wawa", "luigi").item_hand("left").to_toml();
+        assert!(text.contains("item_hand = \"left\"\n"));
+        let fighter = &crate::fighter_toml::parse_all(&text).unwrap()[0];
+        assert_eq!(fighter.item_hand, Some(crate::item_hand::ItemHand::Left));
     }
 
     #[test]
