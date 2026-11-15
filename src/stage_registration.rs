@@ -108,48 +108,106 @@ fn ui_stage_data(registration: &Registration) -> the_csk_collection_api::UiStage
 }
 
 #[cfg(feature = "stage_slot")]
+struct Secret {
+    icon: u64,
+    icon_name: String,
+    place_hash: u64,
+    command_hash: u64,
+}
+
+#[cfg(feature = "stage_slot")]
+static SECRETS: std::sync::Mutex<Vec<Secret>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(feature = "stage_slot")]
+static ROWS: std::sync::Mutex<Vec<Registration>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(feature = "stage_slot")]
 pub fn register_secret(registration: &Registration, base: &str, command: &str) {
+    let Some(secret) = secret(registration, base, command) else {
+        return;
+    };
+    let Ok(mut secrets) = SECRETS.lock() else {
+        return;
+    };
+    if let Some(earlier) = secrets.iter().find(|earlier| earlier.icon == secret.icon) {
+        skyline::println!(
+            "[stagereg] {}: place {:#x} takes this icon's secret from place {:#x}; the last pack wins",
+            secret.icon_name,
+            secret.place_hash,
+            earlier.place_hash
+        );
+    }
+    let icon_row = ROWS
+        .lock()
+        .ok()
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row.stage_hash == secret.icon)
+                .map(|row| stage_entry(row, Some(&secret)))
+        });
+    match icon_row {
+        Some(entry) => the_csk_collection_api::add_stage_db_entry(&entry),
+        None => register_vanilla_secret(&secret),
+    }
+    secrets.push(secret);
+}
+
+#[cfg(feature = "stage_slot")]
+fn secret(registration: &Registration, base: &str, command: &str) -> Option<Secret> {
     use dionysus_core::stage_secret;
-    use the_csk_collection_api::{Hash40Type, StageDatabaseEntry};
 
     let Some(command_name) = stage_secret::command_name(command) else {
         skyline::println!("[stagereg] secret_of {base}: command {command:?} is not l, r or l_r; refused");
-        return;
+        return None;
     };
-    let base_stage_name = stage_secret::ui_stage_name(base);
-    let base_stage = hash40(&base_stage_name);
-    if base_stage == registration.stage_hash {
+    let icon_name = stage_secret::ui_stage_name(base);
+    let icon = hash40(&icon_name);
+    if icon == registration.stage_hash {
         skyline::println!("[stagereg] secret_of {base}: a stage cannot be its own secret; refused");
-        return;
+        return None;
     }
     if let Some((place, existing)) = stage_secret::existing_secret(base) {
         skyline::println!(
             "[stagereg] secret_of {base}: replaces its own secret ({place} on {existing})"
         );
     }
-    let command_hash = hash40(command_name);
-    let entry = StageDatabaseEntry {
-        ui_stage_id: base_stage,
-        secret_stage_place_id: Hash40Type::Overwrite(registration.place_hash),
-        secret_command_id: Hash40Type::Overwrite(command_hash),
-        secret_command_id_joycon: Hash40Type::Overwrite(command_hash),
-        ..Default::default()
-    };
-    the_csk_collection_api::add_stage_db_entry(&entry);
     skyline::println!(
-        "[stagereg] {base_stage_name}: holding {command} on its icon plays place {:#x}",
+        "[stagereg] {icon_name}: holding {command} on its icon plays place {:#x}",
         registration.place_hash
     );
+    Some(Secret {
+        icon,
+        icon_name,
+        place_hash: registration.place_hash,
+        command_hash: hash40(command_name),
+    })
 }
 
 #[cfg(feature = "stage_slot")]
-pub fn register(registration: &Registration) {
+fn register_vanilla_secret(secret: &Secret) {
+    use the_csk_collection_api::{Hash40Type, StageDatabaseEntry};
+
+    let entry = StageDatabaseEntry {
+        ui_stage_id: secret.icon,
+        secret_stage_place_id: Hash40Type::Overwrite(secret.place_hash),
+        secret_command_id: Hash40Type::Overwrite(secret.command_hash),
+        secret_command_id_joycon: Hash40Type::Overwrite(secret.command_hash),
+        ..Default::default()
+    };
+    the_csk_collection_api::add_stage_db_entry(&entry);
+}
+
+#[cfg(feature = "stage_slot")]
+fn stage_entry(
+    registration: &Registration,
+    secret: Option<&Secret>,
+) -> the_csk_collection_api::StageDatabaseEntry {
     use the_csk_collection_api::{
         BoolType, CStrCSK, Hash40Map, Hash40Type, ShortType, SignedByteType, StageDatabaseEntry,
         StringType, UnsignedByteType,
     };
 
-    let entry = StageDatabaseEntry {
+    StageDatabaseEntry {
         ui_stage_id: registration.db.ui_stage_id,
         clone_from_ui_stage_id: None,
         name_id: StringType::Overwrite(CStrCSK::new(&registration.db.name_id)),
@@ -158,13 +216,17 @@ pub fn register(registration: &Registration) {
         can_select: BoolType::Overwrite(registration.db.can_select),
         disp_order: SignedByteType::Overwrite(registration.db.disp_order),
         stage_place_id: Hash40Type::Overwrite(registration.db.stage_place_id),
-        secret_stage_place_id: Hash40Type::Overwrite(registration.db.secret_stage_place_id),
+        secret_stage_place_id: Hash40Type::Overwrite(
+            secret.map_or(registration.db.secret_stage_place_id, |secret| secret.place_hash),
+        ),
         can_demo: BoolType::Overwrite(false),
         is_8player_stage: BoolType::Overwrite(false),
         is_usable_flag: BoolType::Overwrite(true),
         is_usable_amiibo: BoolType::Overwrite(true),
-        secret_command_id: Hash40Type::Overwrite(0),
-        secret_command_id_joycon: Hash40Type::Overwrite(0),
+        secret_command_id: Hash40Type::Overwrite(secret.map_or(0, |secret| secret.command_hash)),
+        secret_command_id_joycon: Hash40Type::Overwrite(
+            secret.map_or(0, |secret| secret.command_hash),
+        ),
         bgm_set_id: Hash40Type::Overwrite(registration.db.bgm_set_id),
         bgm_setting_no: UnsignedByteType::Overwrite(registration.db.bgm_setting_no),
         bgm_selector: BoolType::Overwrite(registration.db.bgm_selector),
@@ -172,9 +234,23 @@ pub fn register(registration: &Registration) {
         is_patch: BoolType::Overwrite(false),
         dlc_chara_id: Hash40Type::Overwrite(0),
         extra_hash_maps: Hash40Map::default(),
+    }
+}
+
+#[cfg(feature = "stage_slot")]
+pub fn register(registration: Registration) {
+    let entry = {
+        let secrets = SECRETS.lock().ok();
+        let secret = secrets.as_ref().and_then(|secrets| {
+            secrets
+                .iter()
+                .rev()
+                .find(|secret| secret.icon == registration.stage_hash)
+        });
+        stage_entry(&registration, secret)
     };
 
-    let data = ui_stage_data(registration);
+    let data = ui_stage_data(&registration);
 
     the_csk_collection_api::add_ui_stage_db_resources_entry(
         registration.place_hash,
@@ -199,6 +275,9 @@ pub fn register(registration: &Registration) {
             ""
         }
     );
+    if let Ok(mut rows) = ROWS.lock() {
+        rows.push(registration);
+    }
 }
 
 #[cfg(test)]
@@ -421,13 +500,13 @@ pub unsafe extern "C" fn clone_engine_register_stage(
             );
             #[cfg(feature = "stage_slot")]
             {
-                register(&_registration);
                 if let Some(wanted) = _registration.deferred_disp_order {
                     crate::stage_db_rows::request_disp_order(_registration.stage_hash, wanted);
                     skyline::println!(
                         "[stagereg] {name} registered hidden; disp_order {wanted} queued for the                          row backend (CSK's SignedByteType stops at 127)"
                     );
                 }
+                register(_registration);
                 0
             }
             #[cfg(not(feature = "stage_slot"))]

@@ -653,7 +653,14 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
         Ok(_registration) => {
             #[cfg(feature = "stage_slot")]
             {
-                crate::stage_registration::register(&_registration);
+                if let Some(wanted) = _registration.deferred_disp_order {
+                    crate::stage_db_rows::request_disp_order(_registration.stage_hash, wanted);
+                    skyline::println!(
+                        "[stagepack] {}: registered hidden; disp_order {wanted} queued for the \
+                         row backend (CSK's SignedByteType stops at 127)",
+                        stage.place_name
+                    );
+                }
                 if let Some(base) = declaration.secret_of.as_deref() {
                     crate::stage_registration::register_secret(
                         &_registration,
@@ -664,14 +671,7 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
                             .unwrap_or(dionysus_core::stage_secret::DEFAULT_COMMAND),
                     );
                 }
-                if let Some(wanted) = _registration.deferred_disp_order {
-                    crate::stage_db_rows::request_disp_order(_registration.stage_hash, wanted);
-                    skyline::println!(
-                        "[stagepack] {}: registered hidden; disp_order {wanted} queued for the \
-                         row backend (CSK's SignedByteType stops at 127)",
-                        stage.place_name
-                    );
-                }
+                crate::stage_registration::register(_registration);
             }
         }
         Err(error) => skyline::println!(
