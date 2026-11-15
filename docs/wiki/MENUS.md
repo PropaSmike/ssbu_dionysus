@@ -514,7 +514,7 @@ text = "Shown under the model."
 
 Items are listed in the order declared. Each is a fighter's costume, so a clone
 holds up to 256 models; for a model that stays still, bind every vertex to
-`Trans`.
+`Trans`. The Workbench's Identity tab edits both tables in a menu part.
 
 ### Backdrop
 

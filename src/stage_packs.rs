@@ -23,6 +23,8 @@ pub struct PackDeclaration {
     pub bgm_selector: Option<bool>,
     pub dynamic_collisions: Vec<String>,
     pub paused_motions: Vec<String>,
+    pub secret_of: Option<String>,
+    pub secret_command: Option<String>,
     pub ladders: Vec<Ladder>,
     pub barrels: Vec<Barrel>,
     pub springs: Vec<Spring>,
@@ -299,6 +301,14 @@ fn top_level(
         ("paused_motions", Value::List(items)) => {
             out.paused_motions = items.iter().map(|item| item.to_ascii_lowercase()).collect()
         }
+        ("secret_of", Value::Text(text)) if !text.trim().is_empty() => {
+            out.secret_of = Some(text.trim().to_ascii_lowercase())
+        }
+        ("secret_command", Value::Text(text))
+            if dionysus_core::stage_secret::command_name(&text).is_some() =>
+        {
+            out.secret_command = Some(text.trim().to_ascii_lowercase())
+        }
         ("forms", Value::List(items)) => {
             *saw_forms = true;
             out.forms.clear();
@@ -319,7 +329,8 @@ fn top_level(
         (
             "place" | "display_name" | "id_name" | "series" | "donor" | "resource_place"
             | "ships_battle_tree" | "disp_order" | "forms" | "bgm" | "bgm_setting_no"
-            | "bgm_selector" | "dynamic_collisions" | "paused_motions",
+            | "bgm_selector" | "dynamic_collisions" | "paused_motions" | "secret_of"
+            | "secret_command",
             _,
         ) => return Err(bad()),
         _ => {}
@@ -643,6 +654,16 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
             #[cfg(feature = "stage_slot")]
             {
                 crate::stage_registration::register(&_registration);
+                if let Some(base) = declaration.secret_of.as_deref() {
+                    crate::stage_registration::register_secret(
+                        &_registration,
+                        base,
+                        declaration
+                            .secret_command
+                            .as_deref()
+                            .unwrap_or(dionysus_core::stage_secret::DEFAULT_COMMAND),
+                    );
+                }
                 if let Some(wanted) = _registration.deferred_disp_order {
                     crate::stage_db_rows::request_disp_order(_registration.stage_hash, wanted);
                     skyline::println!(

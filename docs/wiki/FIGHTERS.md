@@ -661,6 +661,8 @@ fighter holds items in. The base keeps its own, in the same match too.
   the other hand for a clean grip.
 - Every base but Ivysaur has both bones; on `pfushigisou` the key is
   refused. A skeleton of your own needs the bone.
+- The Workbench's Item hand box (Identity tab, fighter) shows the base's hand
+  and each bone that changes.
 
 ## Voice
 

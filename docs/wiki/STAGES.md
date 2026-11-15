@@ -87,6 +87,25 @@ the CSK Collection's JSON under `sd:/ultimate/mods/<pack>/database/` and point
 `bgm` at it. Do not put `stage_database_entries` in that JSON; the engine
 writes the stage row itself.
 
+## Behind another stage's icon
+
+```toml
+secret_of = "battlefield"   # pick this stage while holding the command to play yours
+secret_command = "l"        # l (default), r or l_r
+disp_order = -1             # optional: no icon of its own
+```
+
+Like Boxing Ring's Punch-Out!! version. `secret_of` is a stage's place
+(`battlefield`, `punchoutsb`) or its `ui_stage_` id, another clone's
+included. The engine changes only that stage's secret.
+
+- The button is read on the frame A picks the stage. A stage select that
+  turns pages with L and R (Ultimate S) turns the page when L or R comes
+  first: press it on the same frame as A.
+- Boxing Ring (`punchoutsb`) and Minecraft World (`pickel_world`) have a
+  secret of their own; yours replaces it and the boot log says so.
+- The form picked on the base carries over, so ship the forms it offers.
+
 ## Forms
 
 With `ships_battle_tree = false`, the normal folder supplies every form. Set

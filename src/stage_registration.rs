@@ -86,11 +86,8 @@ pub fn plan(
 }
 
 #[cfg(feature = "stage_slot")]
-pub fn register(registration: &Registration) {
-    use the_csk_collection_api::{
-        BoolType, CStrCSK, Hash40Map, Hash40Type, ShortType, SignedByteType, StageDatabaseEntry,
-        StringType, UiStageData, UiStageResources, UnsignedByteType,
-    };
+fn ui_stage_data(registration: &Registration) -> the_csk_collection_api::UiStageData {
+    use the_csk_collection_api::{UiStageData, UiStageResources};
 
     fn resources(source: &StageResources) -> UiStageResources {
         UiStageResources {
@@ -102,6 +99,55 @@ pub fn register(registration: &Registration) {
             tonelabel_path_hash: source.tonelabel_path_hash,
         }
     }
+
+    UiStageData {
+        normal: resources(&registration.normal),
+        end: resources(&registration.end),
+        battle: resources(&registration.battle),
+    }
+}
+
+#[cfg(feature = "stage_slot")]
+pub fn register_secret(registration: &Registration, base: &str, command: &str) {
+    use dionysus_core::stage_secret;
+    use the_csk_collection_api::{Hash40Type, StageDatabaseEntry};
+
+    let Some(command_name) = stage_secret::command_name(command) else {
+        skyline::println!("[stagereg] secret_of {base}: command {command:?} is not l, r or l_r; refused");
+        return;
+    };
+    let base_stage_name = stage_secret::ui_stage_name(base);
+    let base_stage = hash40(&base_stage_name);
+    if base_stage == registration.stage_hash {
+        skyline::println!("[stagereg] secret_of {base}: a stage cannot be its own secret; refused");
+        return;
+    }
+    if let Some((place, existing)) = stage_secret::existing_secret(base) {
+        skyline::println!(
+            "[stagereg] secret_of {base}: replaces its own secret ({place} on {existing})"
+        );
+    }
+    let command_hash = hash40(command_name);
+    let entry = StageDatabaseEntry {
+        ui_stage_id: base_stage,
+        secret_stage_place_id: Hash40Type::Overwrite(registration.place_hash),
+        secret_command_id: Hash40Type::Overwrite(command_hash),
+        secret_command_id_joycon: Hash40Type::Overwrite(command_hash),
+        ..Default::default()
+    };
+    the_csk_collection_api::add_stage_db_entry(&entry);
+    skyline::println!(
+        "[stagereg] {base_stage_name}: holding {command} on its icon plays place {:#x}",
+        registration.place_hash
+    );
+}
+
+#[cfg(feature = "stage_slot")]
+pub fn register(registration: &Registration) {
+    use the_csk_collection_api::{
+        BoolType, CStrCSK, Hash40Map, Hash40Type, ShortType, SignedByteType, StageDatabaseEntry,
+        StringType, UnsignedByteType,
+    };
 
     let entry = StageDatabaseEntry {
         ui_stage_id: registration.db.ui_stage_id,
@@ -128,11 +174,7 @@ pub fn register(registration: &Registration) {
         extra_hash_maps: Hash40Map::default(),
     };
 
-    let data = UiStageData {
-        normal: resources(&registration.normal),
-        end: resources(&registration.end),
-        battle: resources(&registration.battle),
-    };
+    let data = ui_stage_data(registration);
 
     the_csk_collection_api::add_ui_stage_db_resources_entry(
         registration.place_hash,
