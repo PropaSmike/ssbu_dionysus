@@ -30,9 +30,6 @@ mod game_reloc_13_0_5;
 #[cfg(feature = "native_table_backend")]
 mod native_tables;
 
-#[cfg(feature = "native_relocate")]
-mod resource_relocation;
-
 mod article_owners;
 mod costume_slots;
 mod hash40;
@@ -589,7 +586,7 @@ pub extern "C" fn clone_engine_max_custom_kind() -> i32 {
         return native_tables::last_supported_kind();
     }
     #[cfg(feature = "native_relocate")]
-    return resource_relocation::last_usable_kind();
+    return native_tables::last_supported_kind();
     #[allow(unreachable_code)]
     MAX_PROVEN_CUSTOM_KIND
 }
@@ -641,7 +638,7 @@ fn resource_name_variants(value: &str) -> (String, String) {
 }
 
 #[cfg(feature = "native_relocate")]
-const FIRST_ALLOCATABLE_KIND: i32 = resource_relocation::FIRST_USABLE_SLOT as i32;
+const FIRST_ALLOCATABLE_KIND: i32 = native_tables::first_supported_kind();
 
 unsafe fn allocate_custom_kind(
     fighter_kind_name: *const c_char,
@@ -706,10 +703,7 @@ unsafe fn try_borrow_str(pointer: *const c_char) -> Option<&'static str> {
 
 #[no_mangle]
 pub extern "C" fn clone_engine_capacity_committed() -> u32 {
-    #[cfg(feature = "native_relocate")]
-    return u32::from(resource_relocation::capacity_committed());
-    #[allow(unreachable_code)]
-    0
+    u32::from(cfg!(feature = "native_relocate"))
 }
 
 #[no_mangle]
@@ -5141,9 +5135,6 @@ pub fn main() {
     #[cfg(feature = "native_table_backend")]
     native_tables::initialize();
 
-    #[cfg(feature = "native_relocate")]
-    resource_relocation::start();
-
     #[cfg(feature = "stage_probe")]
     stage_probe::run();
 
@@ -5398,9 +5389,9 @@ pub fn main() {
         skyline::println!(
             "[clone_engine] v15: installed kind-validity gate trace+spoof (0x65dd70): kind 118 traced REAL+SPOOF(kind->0) for the first 8 calls then silently spoofed, kind>0x75 traced up to 32 calls, everything else passthrough"
         );
-        skyline::install_hook!(resmgr_insert_hook);
+        skyline::install_hook!(music_slot_load_hook);
         skyline::println!(
-            "[clone_engine] v49: installed read-only resource-cache trace at 0x17d1d70; logs caller, returned map census, and active byte for Mario/custom kinds after the native call. Tag [resmgr49]."
+            "[clone_engine] stage rows install from the My Music slot load at 0x17d1d70, a game-thread call"
         );
         skyline::install_hook!(load_dispatch_kind_hook);
         skyline::println!(

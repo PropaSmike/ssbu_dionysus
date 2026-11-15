@@ -1425,31 +1425,11 @@ pub(crate) unsafe extern "C" fn path_builder_remap_hook(
 }
 
 #[cfg(feature = "true_kind")]
-pub(crate) const OFF_RESMGR_INSERT: usize = 0x17d1d70;
+pub(crate) const OFF_MUSIC_SLOT_LOAD: usize = 0x17d1d70;
 
 #[cfg(feature = "true_kind")]
-pub(crate) static RESMGR_INS_HI_COUNT: core::sync::atomic::AtomicU32 =
-    core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "true_kind")]
-pub(crate) static RESMGR_INS_LO_COUNT: core::sync::atomic::AtomicU32 =
-    core::sync::atomic::AtomicU32::new(0);
-
-#[cfg(feature = "true_kind")]
-pub(crate) unsafe fn resmgr_active_byte(this: u64, kind: u32) -> i32 {
-    if this == 0 {
-        return -1;
-    }
-    let base = *(this as *const u64);
-    if base == 0 {
-        return -2;
-    }
-    let slot = base.wrapping_add(kind as u64 * 0xc88).wrapping_add(0xd00);
-    *(slot as *const u8) as i32
-}
-
-#[cfg(feature = "true_kind")]
-#[skyline::hook(offset = crate::game::rel(OFF_RESMGR_INSERT))]
-pub(crate) unsafe extern "C" fn resmgr_insert_hook(
+#[skyline::hook(offset = crate::game::rel(OFF_MUSIC_SLOT_LOAD))]
+pub(crate) unsafe extern "C" fn music_slot_load_hook(
     a0: u64,
     a1: u64,
     a2: u64,
@@ -1459,19 +1439,7 @@ pub(crate) unsafe extern "C" fn resmgr_insert_hook(
     a6: u64,
     a7: u64,
 ) -> u64 {
-    let lr: usize;
-    #[cfg(target_arch = "aarch64")]
-    core::arch::asm!("mov {}, x30", out(reg) lr);
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        lr = 0;
-    }
-    let caller_off = crate::game::offset_of(lr);
-    let kind = a1 as u32;
     let ret = call_original!(a0, a1, a2, a3, a4, a5, a6, a7);
-
-    #[cfg(all(feature = "native_relocate", not(feature = "native_patch_probe")))]
-    resource_relocation::on_resource_manager_insert();
 
     #[cfg(feature = "stage_relocate")]
     crate::stage_transaction::try_relocate();
@@ -1483,98 +1451,7 @@ pub(crate) unsafe extern "C" fn resmgr_insert_hook(
     #[cfg(feature = "stage_mint")]
     crate::stage_registry::install_pending();
 
-    let log_probe = |n: u32, label: &str| {
-        let act = resmgr_active_byte(a0, kind);
-        let (count, first_key, first_value) = if a2 != 0 {
-            let count = *((a2 as usize + 0x10) as *const u64);
-            let root = *((a2 as usize + 0x08) as *const u64);
-            if count != 0 && root != 0 && root != a2 {
-                (
-                    count,
-                    *((root as usize + 0x20) as *const u64),
-                    *((root as usize + 0x28) as *const u32),
-                )
-            } else {
-                (count, 0, 0)
-            }
-        } else {
-            (u64::MAX, 0, 0)
-        };
-        dbg_log!(
-            "[resmgr49] #{n} {label} kind={kind} caller=@{caller_off:#x} ret={ret} act={act} out_count={count} first={first_key:#x}/{first_value:#x}"
-        );
-    };
-
-    if kind >= 0x76 && kind <= 0x77 {
-        let n = RESMGR_INS_HI_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        if n < 64 {
-            log_probe(n, "custom");
-        }
-    } else if kind == 0 {
-        let n = RESMGR_INS_LO_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        if n < 16 {
-            log_probe(n, "mario");
-        }
-    }
     ret
-}
-
-#[cfg(feature = "true_kind")]
-pub(crate) const OFF_RESMGR_ACTIVATE_BATCH_CALL: usize = 0x184a360;
-#[cfg(feature = "true_kind")]
-pub(crate) const OFF_RESMGR_ACTIVATE_DYNAMIC_CALL: usize = 0x197489c;
-
-#[cfg(feature = "true_kind")]
-#[skyline::from_offset(crate::game::rel(0x17d1f40))]
-pub(crate) unsafe fn resmgr_activate_native(this: u64, kind: u32, source_tree: u64);
-
-#[cfg(feature = "true_kind")]
-pub(crate) static RESMGR_MIRROR_BATCH_COUNT: core::sync::atomic::AtomicU32 =
-    core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "true_kind")]
-pub(crate) static RESMGR_MIRROR_DYNAMIC_COUNT: core::sync::atomic::AtomicU32 =
-    core::sync::atomic::AtomicU32::new(0);
-
-#[cfg(feature = "true_kind")]
-pub(crate) unsafe fn resmgr_activate_and_mirror(
-    ctx: &skyline::hooks::InlineCtx,
-    site: &'static str,
-    counter: &core::sync::atomic::AtomicU32,
-) {
-    let this = ctx.registers[0].x();
-    let kind = ctx.registers[1].x() as u32;
-    let source_tree = ctx.registers[2].x();
-
-    if kind != 0 {
-        return;
-    }
-
-    let before = resmgr_active_byte(this, FIRST_CUSTOM_KIND as u32);
-    resmgr_activate_native(this, FIRST_CUSTOM_KIND as u32, source_tree);
-    let after = resmgr_active_byte(this, FIRST_CUSTOM_KIND as u32);
-
-    let n = counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-    if n < 24 {
-        let mario = resmgr_active_byte(this, 0);
-        dbg_log!(
-            "[resmirror] {site} #{n} manager={this:#x} tree={source_tree:#x} \
-             kind0_act={mario} kind118_act={before}->{after}"
-        );
-    }
-}
-
-#[cfg(feature = "true_kind")]
-#[allow(dead_code)]
-#[skyline::hook(offset = crate::game::rel(OFF_RESMGR_ACTIVATE_BATCH_CALL), inline)]
-pub(crate) unsafe fn resmgr_activate_batch_call_hook(ctx: &skyline::hooks::InlineCtx) {
-    resmgr_activate_and_mirror(ctx, "batch@184a360", &RESMGR_MIRROR_BATCH_COUNT);
-}
-
-#[cfg(feature = "true_kind")]
-#[allow(dead_code)]
-#[skyline::hook(offset = crate::game::rel(OFF_RESMGR_ACTIVATE_DYNAMIC_CALL), inline)]
-pub(crate) unsafe fn resmgr_activate_dynamic_call_hook(ctx: &skyline::hooks::InlineCtx) {
-    resmgr_activate_and_mirror(ctx, "dynamic@197489c", &RESMGR_MIRROR_DYNAMIC_COUNT);
 }
 
 pub(crate) const OFF_LOAD_DISPATCH: usize = 0x17e5c00;

@@ -1,8 +1,6 @@
 use super::{hash40, CloneDefinition};
 use dionysus_api::{
-    BACKEND_STATUS_COMPILED, BACKEND_STATUS_HOOKS_INSTALLED, BACKEND_STATUS_READY,
-    BACKEND_STATUS_RESOURCE_LAYOUT_PROVEN, BACKEND_STATUS_RESOURCE_LIFECYCLE_PROVEN,
-    BACKEND_STATUS_STATIC_PREFLIGHT_OK, BACKEND_STATUS_STATIC_TABLES_READY,
+    BACKEND_STATUS_COMPILED, BACKEND_STATUS_STATIC_PREFLIGHT_OK, BACKEND_STATUS_STATIC_TABLES_READY,
 };
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
@@ -286,26 +284,6 @@ fn build_static_tables() {
         return;
     }
     STATUS.fetch_or(BACKEND_STATUS_STATIC_TABLES_READY, Ordering::AcqRel);
-
-    if RESOURCE_LAYOUT_PROVEN {
-        STATUS.fetch_or(BACKEND_STATUS_RESOURCE_LAYOUT_PROVEN, Ordering::AcqRel);
-    }
-    if RESOURCE_LIFECYCLE_PROVEN {
-        STATUS.fetch_or(BACKEND_STATUS_RESOURCE_LIFECYCLE_PROVEN, Ordering::AcqRel);
-    }
-    if !RESOURCE_LAYOUT_PROVEN || !RESOURCE_LIFECYCLE_PROVEN {
-        skyline::println!(
-            "[native_tables] fail-closed: static tables are ready, but the manifest does not yet prove the 0xc88 resource block's layout and lifecycle; kinds {}..={} remain unavailable",
-            FIRST_NATIVE_BACKEND_KIND,
-            LAST_NATIVE_BACKEND_KIND
-        );
-        return;
-    }
-
-    let _required_before_ready = BACKEND_STATUS_HOOKS_INSTALLED | BACKEND_STATUS_READY;
-    skyline::println!(
-        "[native_tables] resource proof passed, but redirect hooks are not implemented"
-    );
 }
 
 pub(crate) fn publish_descriptor(definition: &CloneDefinition) -> bool {
@@ -330,6 +308,10 @@ pub(crate) fn published_lower_name_table_base(definition: &CloneDefinition) -> O
 
 pub(crate) fn status() -> u32 {
     STATUS.load(Ordering::Acquire)
+}
+
+pub(crate) const fn first_supported_kind() -> i32 {
+    FIRST_NATIVE_BACKEND_KIND
 }
 
 pub(crate) const fn last_supported_kind() -> i32 {

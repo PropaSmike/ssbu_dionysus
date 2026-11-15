@@ -50,7 +50,7 @@ KIND.store(dionysus_api::allocate(&fighter)?); // register, keep the kind
 | `allocate(&CloneRegistration)` | Register, get the kind. |
 | `register(&CloneRegistration)` | Register with a kind you chose. |
 | `CloneKind::new(name)`, `.store(kind)`, `.get()` | Holds the kind. |
-| `capacity_committed()` | Whether the expanded table exists yet. |
+| `capacity_committed()` | Whether custom kinds 121 to 255 can be allocated; true in every current build. |
 
 Order: engine and Smashline checks, `allocate`, Smashline scripts,
 ParamConfig and articles, Kirby and shared hooks, mount callback, CSK entry
