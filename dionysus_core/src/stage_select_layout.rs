@@ -8,6 +8,7 @@ const NAME_AT: usize = 0x0c;
 const NAME_LEN: usize = 24;
 const TRANSLATE_AT: usize = 0x2c;
 const SCALE_AT: usize = 0x44;
+const MAGNIFY_AT: usize = 0x58;
 
 pub const MAX_GROWTH: usize = (MAX_BUTTONS * BUTTON_SECTION).div_ceil(SARC_GRANULE) * SARC_GRANULE;
 
@@ -380,7 +381,7 @@ pub fn add_shrunk(archive: &[u8], total: usize) -> Result<Shrunk, LayoutError> {
     let Opened { data, entries, target, layout, sections, buttons } = open(archive)?;
     checked(total, buttons.len())?;
     let grid = grid_of(&layout, &buttons)?;
-    let parent = parent_of(&sections, &buttons)?;
+    parent_of(&sections, &buttons)?;
     let (columns, rows, scale) = fit(grid.columns, grid.rows, total);
 
     let template_at = buttons[0].offset;
@@ -401,15 +402,15 @@ pub fn add_shrunk(archive: &[u8], total: usize) -> Result<Shrunk, LayoutError> {
     let top = grid.y0 - (height - used_height) / 2.0;
     for button in &new_buttons {
         let (row, column) = (button.number / columns, button.number % columns);
-        let x = left / scale + column as f32 * grid.x_pitch;
-        let y = top / scale - row as f32 * grid.y_pitch;
+        let x = left + column as f32 * grid.x_pitch * scale;
+        let y = top - row as f32 * grid.y_pitch * scale;
         put_f32(&mut grown, button.offset + TRANSLATE_AT, x);
         put_f32(&mut grown, button.offset + TRANSLATE_AT + 4, y);
+        let magnify_x = f32_at(&grown, button.offset + MAGNIFY_AT).ok_or(LayoutError::NotALayout)?;
+        let magnify_y = f32_at(&grown, button.offset + MAGNIFY_AT + 4).ok_or(LayoutError::NotALayout)?;
+        put_f32(&mut grown, button.offset + MAGNIFY_AT, magnify_x * scale);
+        put_f32(&mut grown, button.offset + MAGNIFY_AT + 4, magnify_y * scale);
     }
-    let scale_x = f32_at(&layout, parent.offset + SCALE_AT).ok_or(LayoutError::NotALayout)?;
-    let scale_y = f32_at(&layout, parent.offset + SCALE_AT + 4).ok_or(LayoutError::NotALayout)?;
-    put_f32(&mut grown, parent.offset + SCALE_AT, scale_x * scale);
-    put_f32(&mut grown, parent.offset + SCALE_AT + 4, scale_y * scale);
 
     let archive = replace_file(archive, data, &entries, target, &grown)?;
     if button_count(&archive)? != total {
@@ -463,6 +464,10 @@ mod tests {
         out[TRANSLATE_AT + 4..TRANSLATE_AT + 8].copy_from_slice(&y.to_le_bytes());
         out[SCALE_AT..SCALE_AT + 4].copy_from_slice(&1.0_f32.to_le_bytes());
         out[SCALE_AT + 4..SCALE_AT + 8].copy_from_slice(&1.0_f32.to_le_bytes());
+        if size == BUTTON_SECTION {
+            out[MAGNIFY_AT..MAGNIFY_AT + 4].copy_from_slice(&1.0_f32.to_le_bytes());
+            out[MAGNIFY_AT + 4..MAGNIFY_AT + 8].copy_from_slice(&1.0_f32.to_le_bytes());
+        }
         out
     }
 
@@ -616,15 +621,19 @@ mod tests {
     }
 
     #[test]
-    fn shrinking_adds_the_buttons_and_scales_only_their_parent() {
+    fn shrinking_adds_the_buttons_and_magnifies_them_leaving_scales_alone() {
         let source = vanilla_like();
         let shrunk = add_shrunk(&source, 130).unwrap();
         assert_eq!(button_count(&shrunk.archive), Ok(130));
         let layout = file(&shrunk.archive, LAYOUT_FILE);
-        assert!((parent_scale(&layout) - shrunk.scale).abs() < 1e-5);
+        assert_eq!(parent_scale(&layout), 1.0);
         let sections = sections_of(&layout).unwrap();
         for button in buttons_of(&layout, &sections).unwrap() {
             assert_eq!(f32_at(&layout, button.offset + SCALE_AT), Some(1.0));
+            let magnify = f32_at(&layout, button.offset + MAGNIFY_AT).unwrap();
+            assert!((magnify - shrunk.scale).abs() < 1e-5, "{magnify}");
+            let magnify = f32_at(&layout, button.offset + MAGNIFY_AT + 4).unwrap();
+            assert!((magnify - shrunk.scale).abs() < 1e-5, "{magnify}");
         }
         let stage_make = sections[sections.len() - 1].offset;
         assert_eq!(f32_at(&layout, stage_make + TRANSLATE_AT), Some(7.0));
@@ -641,17 +650,16 @@ mod tests {
             let bottom = ORIGIN.1 - 10.0 * PITCH.1;
             for number in 0..total {
                 let (x, y) = position(&layout, number);
-                let (x, y) = (x * shrunk.scale, y * shrunk.scale);
                 assert!(x >= ORIGIN.0 - 0.1 && x <= right + 0.1, "{total} {number} x {x}");
                 assert!(y <= ORIGIN.1 + 0.1 && y >= bottom - 0.1, "{total} {number} y {y}");
             }
             let (first_x, first_y) = position(&layout, 0);
             let (next_x, next_y) = position(&layout, 1);
             let (below_x, below_y) = position(&layout, shrunk.columns);
-            assert!((next_x - first_x - PITCH.0).abs() < 0.01);
+            assert!((next_x - first_x - PITCH.0 * shrunk.scale).abs() < 0.01);
             assert!((next_y - first_y).abs() < 0.01);
             assert!((below_x - first_x).abs() < 0.01);
-            assert!((first_y - below_y - PITCH.1).abs() < 0.01);
+            assert!((first_y - below_y - PITCH.1 * shrunk.scale).abs() < 0.01);
         }
     }
 
