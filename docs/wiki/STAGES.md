@@ -15,6 +15,7 @@ normal_tree = "normal"            # "battle": the battle folder supplies every f
 series = "mario"                  # series icon
 disp_order = 121                  # position on the stage select screen
 donor = "battlefield"             # the vanilla stage whose code and gimmicks run
+hazards = false                   # optional: hazards always off (true: always on)
 bgm = "smashbtl"                  # My Music playlist
 bgm_setting_no = 0                # its column, 0 to 15
 ```
@@ -23,6 +24,7 @@ bgm_setting_no = 0                # its column, 0 to 15
 |---|---|
 | `donor` | Your stage runs this vanilla stage's code (moving parts, hazards) |
 | `resource_place` | Your stage uses this vanilla stage's whole file tree |
+| `hazards` | `false` turns the donor's hazards off whatever the Stage Hazards rule says, `true` keeps them on. Left out, the rule decides |
 
 `content_donor`, `content_donor_tree` and `carry_donor_scenery` are Clone
 Pack Workbench keys, ignored by the engine. Always set `content_donor_tree`
@@ -34,6 +36,17 @@ Mishima Dojo) and when the match draws its random setup (Minecraft World,
 Super Mario Maker). Everything else still sees your stage's own id: its
 files, name and records. `stage_donor_tests = false` in
 `sd:/ultimate/dionysus/settings.toml` turns this off.
+
+stage_config's `gimmick_param` cannot name a cloned stage, so it never reaches
+yours: use `hazards`.
+
+## Stage parameters
+
+A donor's code reads its `.stdat` files by file name. Keep the donor's names
+in your own folder: a Suzaku Castle clone ships
+`stage/<place>/normal/param/sf_suzaku.stdat`, never `<place>.stdat`. A renamed
+file loads but is never read, and the stage runs on built-in values. The
+Workbench linter lists the names each donor reads.
 
 Stage-select icons (`stage_<N>_<id_name>.bntx`, `id_name` lowercased) go
 under `ui/replace/stage/stage_<N>/` or, as the patch-era stages' do,

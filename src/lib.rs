@@ -149,6 +149,7 @@ mod stage_gimmicks;
 mod stage_csk_table;
 mod stage_db_rows;
 mod stage_dispatch;
+mod stage_hazards;
 #[cfg(feature = "css_slot")]
 mod stage_donor_tests;
 mod stage_ledger;

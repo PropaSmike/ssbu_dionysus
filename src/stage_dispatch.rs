@@ -141,73 +141,57 @@ pub fn set_donor(
     Ok(())
 }
 
-const DONOR_SLOTS: usize = 32;
-static DONOR_MINTED: [core::sync::atomic::AtomicU32; DONOR_SLOTS] =
-    [const { core::sync::atomic::AtomicU32::new(0) }; DONOR_SLOTS];
-static DONOR_BASE: [core::sync::atomic::AtomicU32; DONOR_SLOTS] =
-    [const { core::sync::atomic::AtomicU32::new(0) }; DONOR_SLOTS];
+const NO_DONOR: u32 = u32::MAX;
+static DONOR_BASE: [core::sync::atomic::AtomicU32; EXPANDED_ENTRIES] =
+    [const { core::sync::atomic::AtomicU32::new(NO_DONOR) }; EXPANDED_ENTRIES];
 
-static DONOR_OWNS_STDAT: [core::sync::atomic::AtomicBool; DONOR_SLOTS] =
-    [const { core::sync::atomic::AtomicBool::new(false) }; DONOR_SLOTS];
+static DONOR_OWNS_STDAT: [core::sync::atomic::AtomicBool; EXPANDED_ENTRIES] =
+    [const { core::sync::atomic::AtomicBool::new(false) }; EXPANDED_ENTRIES];
+
+fn donor_slot(minted: u32) -> Option<usize> {
+    let slot = minted as usize;
+    (minted != 0 && slot < EXPANDED_ENTRIES).then_some(slot)
+}
 
 pub(crate) fn set_owns_stdat(minted: u32) -> bool {
     use core::sync::atomic::Ordering;
-    if minted == 0 {
+    let Some(slot) = donor_slot(minted) else {
+        return false;
+    };
+    if DONOR_BASE[slot].load(Ordering::Acquire) == NO_DONOR {
         return false;
     }
-    for slot in 0..DONOR_SLOTS {
-        if DONOR_MINTED[slot].load(Ordering::Acquire) == minted {
-            DONOR_OWNS_STDAT[slot].store(true, Ordering::Release);
-            return true;
-        }
-    }
-    false
+    DONOR_OWNS_STDAT[slot].store(true, Ordering::Release);
+    true
 }
 
 pub(crate) fn owns_stdat(minted: u32) -> bool {
     use core::sync::atomic::Ordering;
-    if minted == 0 {
-        return false;
-    }
-    for slot in 0..DONOR_SLOTS {
-        match DONOR_MINTED[slot].load(Ordering::Acquire) {
-            0 => return false,
-            found if found == minted => return DONOR_OWNS_STDAT[slot].load(Ordering::Acquire),
-            _ => {}
-        }
-    }
-    false
+    donor_slot(minted).is_some_and(|slot| {
+        DONOR_BASE[slot].load(Ordering::Acquire) != NO_DONOR
+            && DONOR_OWNS_STDAT[slot].load(Ordering::Acquire)
+    })
 }
 
 pub(crate) fn set_donor_kind(minted: u32, donor: u32) -> bool {
     use core::sync::atomic::Ordering;
-    if minted == 0 {
+    let Some(slot) = donor_slot(minted) else {
+        return false;
+    };
+    if donor == NO_DONOR {
         return false;
     }
-    for slot in 0..DONOR_SLOTS {
-        let current = DONOR_MINTED[slot].load(Ordering::Acquire);
-        if current == minted || current == 0 {
-            DONOR_BASE[slot].store(donor, Ordering::Release);
-            DONOR_MINTED[slot].store(minted, Ordering::Release);
-            return true;
-        }
-    }
-    false
+    DONOR_BASE[slot].store(donor, Ordering::Release);
+    true
 }
 
 pub(crate) fn donor_for(id: u32) -> Option<u32> {
     use core::sync::atomic::Ordering;
-    if id == 0 {
-        return None;
+    let slot = donor_slot(id)?;
+    match DONOR_BASE[slot].load(Ordering::Acquire) {
+        NO_DONOR => None,
+        donor => Some(donor),
     }
-    for slot in 0..DONOR_SLOTS {
-        match DONOR_MINTED[slot].load(Ordering::Acquire) {
-            0 => return None,
-            found if found == id => return Some(DONOR_BASE[slot].load(Ordering::Acquire)),
-            _ => {}
-        }
-    }
-    None
 }
 
 const STAGE_FACTORY_DISPATCH: usize = 0x2633d10;

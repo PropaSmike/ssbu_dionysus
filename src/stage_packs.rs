@@ -15,6 +15,7 @@ pub struct PackDeclaration {
     pub forms: Vec<Form>,
     pub ships_battle_tree: bool,
     pub normal_in_battle_tree: bool,
+    pub hazards: Option<bool>,
     pub series: String,
     pub disp_order: i32,
     pub donor: Option<String>,
@@ -302,6 +303,7 @@ fn top_level(
                 _ => return Err(bad()),
             }
         }
+        ("hazards", Value::Flag(flag)) => out.hazards = Some(flag),
         ("disp_order", Value::Number(value)) => out.disp_order = value as i32,
         ("dynamic_collisions", Value::List(items)) => {
             out.dynamic_collisions = items.iter().map(|item| item.to_ascii_lowercase()).collect()
@@ -336,7 +338,7 @@ fn top_level(
         }
         (
             "place" | "display_name" | "id_name" | "series" | "donor" | "resource_place"
-            | "ships_battle_tree" | "normal_tree" | "disp_order" | "forms" | "bgm"
+            | "ships_battle_tree" | "normal_tree" | "hazards" | "disp_order" | "forms" | "bgm"
             | "bgm_setting_no" | "bgm_selector" | "dynamic_collisions" | "paused_motions"
             | "secret_of" | "secret_command",
             _,
@@ -532,7 +534,7 @@ fn ships_stdat(directory: &str, stage: &CloneStage) -> bool {
 #[cfg(all(not(test), feature = "stage_mint"))]
 fn mint(directory: &str, declaration: &PackDeclaration) {
     let stage = declaration.to_clone_stage();
-    let place = {
+    let (place, stage_ids) = {
         let Ok(mut registry) = crate::stage_registry::registry().lock() else {
             skyline::println!("[stagepack] {directory}: registry unavailable");
             return;
@@ -545,7 +547,10 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
             return;
         }
         match registry.register(&stage) {
-            Ok(minted) => minted.place,
+            Ok(minted) => (
+                minted.place,
+                minted.forms.iter().map(|(stage_id, _)| *stage_id).collect::<Vec<u32>>(),
+            ),
             Err(error) => {
                 skyline::println!("[stagepack] {directory}: refused: {error:?}");
                 return;
@@ -557,6 +562,17 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
         if let Ok(mut registry) = crate::stage_registry::registry().lock() {
             registry.set_behaviour(&stage.place_name, donor);
         }
+    }
+
+    if let Some(hazards) = declaration.hazards {
+        for stage_id in &stage_ids {
+            crate::stage_hazards::force(*stage_id, hazards);
+        }
+        skyline::println!(
+            "[stagepack] {}: hazards always {}, whatever the rule says",
+            stage.place_name,
+            if hazards { "on" } else { "off" }
+        );
     }
 
     if ships_stdat(directory, &stage) {
@@ -751,6 +767,17 @@ donor        = "photostage"
         assert_eq!(stage.tree(Form::Omega), "battle");
         assert!(matches!(
             parse("place = \"x\"\nnormal_tree = \"end\""),
+            Err(ParseError::BadValue { .. })
+        ));
+    }
+
+    #[test]
+    fn hazards_is_a_flag_and_absent_means_the_rule() {
+        assert_eq!(parse("place = \"x\"").unwrap().hazards, None);
+        assert_eq!(parse("place = \"x\"\nhazards = false").unwrap().hazards, Some(false));
+        assert_eq!(parse("place = \"x\"\nhazards = true").unwrap().hazards, Some(true));
+        assert!(matches!(
+            parse("place = \"x\"\nhazards = \"off\""),
             Err(ParseError::BadValue { .. })
         ));
     }

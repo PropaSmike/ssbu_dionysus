@@ -245,7 +245,8 @@ unsafe fn stage_random_settings(parameter: *mut u32, seed: u64, a2: u64, a3: u64
         return call_original!(parameter, seed, a2, a3, a4, a5, a6, a7);
     }
     let id = core::ptr::read_volatile(parameter);
-    let donor = if id < VANILLA_STAGE_IDS { None } else { crate::stage_dispatch::donor_for(id) };
+    crate::stage_hazards::apply(parameter.cast(), id);
+    let donor = if id < VANILLA_STAGE_IDS || !enabled() { None } else { crate::stage_dispatch::donor_for(id) };
     if let Some(donor) = donor {
         core::ptr::write_volatile(parameter, donor);
         if RANDOM_LOG.fetch_add(1, Ordering::Relaxed) < LOG_BUDGET {
@@ -368,8 +369,17 @@ stage_donor_loads! {
     stage_builder_b(8, 0x5d0, 0x1342cfc, 0xb945d108);
 }
 
+fn install_random_settings() -> bool {
+    let random = unsafe { crate::game::text_word(STAGE_RANDOM_SETTINGS) } == STAGE_RANDOM_SETTINGS_OPCODE;
+    if random {
+        skyline::install_hooks!(stage_random_settings);
+    }
+    random
+}
+
 pub(crate) fn install() {
     if !enabled() {
+        install_random_settings();
         skyline::println!("[stagedonor] off: cloned stages answer their own id to per-stage tests (settings.toml stage_donor_tests = false)");
         return;
     }
@@ -397,10 +407,7 @@ pub(crate) fn install() {
         "nothing (the site holds another instruction)"
     };
     skyline::println!("[stagedonor] the second enemy stage test goes through {gate}");
-    let random = unsafe { crate::game::text_word(STAGE_RANDOM_SETTINGS) } == STAGE_RANDOM_SETTINGS_OPCODE;
-    if random {
-        skyline::install_hooks!(stage_random_settings);
-    }
+    let random = install_random_settings();
     skyline::println!(
         "[stagedonor] cloned stages answer their donor's id to per-stage tests: {replaced} of {} stage classes, {} getter call sites, {inline} inline sites, random stage settings {}, fighter scripts",
         STAGE_VTABLES.len(),
