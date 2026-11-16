@@ -231,7 +231,9 @@ fn stage_entry(
         bgm_setting_no: UnsignedByteType::Overwrite(registration.db.bgm_setting_no),
         bgm_selector: BoolType::Overwrite(registration.db.bgm_selector),
         is_dlc: BoolType::Overwrite(registration.db.is_dlc),
-        is_patch: BoolType::Overwrite(false),
+        is_patch: BoolType::Overwrite(crate::ui_pictures::stage_reads_patch_tree(
+            &registration.db.name_id,
+        )),
         dlc_chara_id: Hash40Type::Overwrite(0),
         extra_hash_maps: Hash40Map::default(),
     }
@@ -239,6 +241,12 @@ fn stage_entry(
 
 #[cfg(feature = "stage_slot")]
 pub fn register(registration: Registration) {
+    if crate::ui_pictures::stage_reads_patch_tree(&registration.db.name_id) {
+        skyline::println!(
+            "[stagereg] {}: stage-select icons only under ui/replace_patch/stage, so its row reads that tree",
+            registration.db.name_id
+        );
+    }
     let entry = {
         let secrets = SECRETS.lock().ok();
         let secret = secrets.as_ref().and_then(|secrets| {

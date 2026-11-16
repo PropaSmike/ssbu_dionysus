@@ -45,6 +45,12 @@ The full call is in the [API reference](../API.md#character-select-entry).
 A pack with no plugin drops `css = false` and adds `display_name`, `series`,
 `disp_order` to `fighter.toml`; the engine publishes the entry.
 
+Select-screen pictures (`chara_<N>_<name_id>_<costume>.bntx`) go under
+`ui/replace/chara/chara_<N>/` or, as the DLC fighters' do,
+`ui/replace_patch/chara/chara_<N>/`. A fighter reads one tree (`is_patch` in
+its row): the engine points yours at the tree that has your pictures, so keep
+them in one.
+
 Classic Mode plays `ui/param/standard/standard_route_<name_label>.prc` when
 your pack ships one, and the base's route otherwise. The route preview titles
 yours `mnu_standard_sub_<name_label>` (ship it in `ui/message/msg_menu.xmsbt`)

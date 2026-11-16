@@ -456,8 +456,25 @@ unsafe extern "C" fn add_chara_bridge(entry: *const CharacterDatabaseEntry) {
         },
     };
     let sent = rewritten.as_ref().unwrap_or(given);
+    let treed = with_picture_tree(sent);
+    let sent = treed.as_ref().unwrap_or(sent);
     remember(sent, own);
     original(sent);
+}
+
+fn with_picture_tree(entry: &CharacterDatabaseEntry) -> Option<CharacterDatabaseEntry> {
+    if is_playable_row(entry.ui_chara_id) {
+        return None;
+    }
+    let name = name_text(&entry.name_id)?;
+    let set = match entry.is_patch {
+        BoolType::Overwrite(flag) | BoolType::Optional(Some(flag)) => Some(flag),
+        BoolType::Optional(None) => None,
+    };
+    let patch = crate::ui_pictures::chara_patch_flag(&name, set, entry.clone_from_ui_chara_id)?;
+    let mut treed = entry.clone();
+    treed.is_patch = BoolType::Overwrite(patch);
+    Some(treed)
 }
 
 #[skyline::hook(offset = crate::game::rel(crate::OFF_PLAYER_INFO_COSTUME_STORED), inline)]

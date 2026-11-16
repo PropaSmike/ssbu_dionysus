@@ -616,7 +616,10 @@ pub(crate) unsafe fn register_one_csk_css_slot(
         is_boss: BoolType::Overwrite(false),
         is_hidden_boss: BoolType::Overwrite(false),
         is_dlc: BoolType::Overwrite(false),
-        is_patch: BoolType::Overwrite(false),
+        is_patch: BoolType::Overwrite(
+            crate::ui_pictures::chara_patch_flag(css.ui_name, Some(false), Some(selectable_base_ui))
+                .unwrap_or(false),
+        ),
         is_plural_message: BoolType::Overwrite(false),
         is_plural_narration: BoolType::Overwrite(false),
         is_article: BoolType::Overwrite(false),

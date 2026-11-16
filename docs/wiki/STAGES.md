@@ -35,6 +35,12 @@ Super Mario Maker). Everything else still sees your stage's own id: its
 files, name and records. `stage_donor_tests = false` in
 `sd:/ultimate/dionysus/settings.toml` turns this off.
 
+Stage-select icons (`stage_<N>_<id_name>.bntx`, `id_name` lowercased) go
+under `ui/replace/stage/stage_<N>/` or, as the patch-era stages' do,
+`ui/replace_patch/stage/stage_<N>/`. A stage reads one tree (`is_patch` in its
+row): the engine points yours at the tree that has your icons, so keep them in
+one.
+
 ## Past 121 stages
 
 The game has 121 stage buttons. Dionysus adds more, up to 255, for any stage

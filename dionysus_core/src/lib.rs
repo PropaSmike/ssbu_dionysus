@@ -42,6 +42,7 @@ pub mod stage_secret;
 pub mod stage_select_layout;
 pub mod status_starts;
 pub mod text_layout;
+pub mod ui_pictures;
 pub mod vtable_copy;
 pub mod weapon_record;
 

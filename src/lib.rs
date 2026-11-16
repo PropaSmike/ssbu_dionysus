@@ -4918,6 +4918,8 @@ mod item_hand;
 mod css_registration;
 #[cfg(feature = "css_slot")]
 use css_registration::*;
+#[cfg(any(feature = "css_slot", feature = "stage_slot"))]
+mod ui_pictures;
 #[cfg(feature = "css_slot")]
 mod csk_row_bridge;
 #[cfg(feature = "css_slot")]
