@@ -280,6 +280,9 @@ mod live {
             let Ok(text) = std::fs::read_to_string(directory.join("item.toml")) else {
                 continue;
             };
+            if !crate::mod_folders::enabled(&directory) {
+                continue;
+            }
             declarations.push((
                 directory
                     .file_name()

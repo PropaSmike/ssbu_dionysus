@@ -30,7 +30,7 @@ fn scan() -> Found {
         return found;
     };
     for pack in mods.flatten() {
-        if pack.file_name().to_string_lossy().starts_with('.') {
+        if !crate::mod_folders::enabled(&pack.path()) {
             continue;
         }
         for (tree, patch) in TREES {

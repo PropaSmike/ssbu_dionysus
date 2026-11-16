@@ -110,6 +110,9 @@ mod live {
             let Ok(text) = std::fs::read_to_string(directory.join("fighter.toml")) else {
                 continue;
             };
+            if !crate::mod_folders::enabled(&directory) {
+                continue;
+            }
             manifests.push((
                 directory
                     .file_name()
@@ -152,7 +155,7 @@ mod live {
         let entries = std::fs::read_dir(MOD_ROOT).ok()?;
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.join("fighter").join(resource).is_dir() {
+            if path.join("fighter").join(resource).is_dir() && crate::mod_folders::enabled(&path) {
                 return Some(leak(&entry.file_name().to_string_lossy()));
             }
         }

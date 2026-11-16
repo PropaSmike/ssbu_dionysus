@@ -10,6 +10,9 @@ pub(crate) fn load_all() {
         .flatten()
         .filter_map(|entry| {
             let text = std::fs::read_to_string(entry.path().join("enemy.toml")).ok()?;
+            if !crate::mod_folders::enabled(&entry.path()) {
+                return None;
+            }
             Some((entry.file_name().to_string_lossy().to_string(), text))
         })
         .collect();

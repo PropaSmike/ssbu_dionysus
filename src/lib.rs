@@ -139,6 +139,7 @@ mod menu_movie;
 mod menu_scripts;
 #[cfg(feature = "css_slot")]
 mod menu_sequences;
+mod mod_folders;
 #[cfg(feature = "css_slot")]
 mod menu_backdrop;
 #[cfg(feature = "css_slot")]

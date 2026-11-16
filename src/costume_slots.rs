@@ -72,6 +72,9 @@ pub(crate) fn scan_mods() {
         let Ok(contents) = std::fs::read_to_string(&marker) else {
             continue;
         };
+        if !crate::mod_folders::enabled(&entry.path()) {
+            continue;
+        }
         files += 1;
         for (identity, slot) in parse(&contents) {
             declare(&identity, slot);

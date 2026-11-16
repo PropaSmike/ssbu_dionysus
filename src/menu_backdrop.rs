@@ -85,6 +85,9 @@ fn discover() -> HashMap<u64, (String, PathBuf)> {
     let mut folders: Vec<PathBuf> = mods.flatten().map(|entry| entry.path()).collect();
     folders.sort();
     for folder in folders {
+        if !crate::mod_folders::enabled(&folder) {
+            continue;
+        }
         for set in SETS {
             for file in FILES {
                 let source = folder.join(FOLDER).join(set).join(file);

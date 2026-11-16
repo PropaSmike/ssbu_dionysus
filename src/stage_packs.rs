@@ -411,6 +411,9 @@ fn load_orders(directory: &std::path::Path) {
     let Ok(text) = std::fs::read_to_string(directory.join(stage_order::FILE_NAME)) else {
         return;
     };
+    if !crate::mod_folders::enabled(directory) {
+        return;
+    }
     let name = directory
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
@@ -441,6 +444,9 @@ pub fn load_all() {
         let Ok(text) = std::fs::read_to_string(&manifest) else {
             continue;
         };
+        if !crate::mod_folders::enabled(&directory) {
+            continue;
+        }
         declarations.push((
             directory
                 .file_name()

@@ -1194,6 +1194,13 @@ impl Registry {
         &self.main_menu_layouts
     }
 
+    pub fn keep_main_menu_layouts(&mut self, keep: impl Fn(u64) -> bool) -> Vec<u64> {
+        let (kept, dropped): (Vec<u64>, Vec<u64>) =
+            self.main_menu_layouts.iter().partition(|hash| keep(**hash));
+        self.main_menu_layouts = kept;
+        dropped
+    }
+
     pub fn cover_side_panel(&mut self, hash: u64) {
         let hash = hash & HASH_MASK;
         if !self.over_side_panel.contains(&hash) {
@@ -1627,6 +1634,26 @@ scene = "IngameCallSequenceScene"
             }),
             Err(Refusal::NotCustom)
         );
+    }
+
+    #[test]
+    fn an_unserved_main_menu_layout_is_dropped_and_the_rest_keep_their_order() {
+        let first = hash40("ui/layout/menu/a/a/layout.arc");
+        let missing = hash40("ui/layout/menu/b/b/layout.arc");
+        let last = hash40("ui/layout/menu/c/c/layout.arc");
+        let mut registry = Registry::default();
+        for hash in [first, missing, last] {
+            registry.add_main_menu_layout(hash).unwrap();
+        }
+        registry.cover_side_panel(last);
+        let dropped = registry.keep_main_menu_layouts(|hash| hash != missing);
+        assert_eq!(dropped, vec![missing]);
+        assert_eq!(registry.main_menu_layouts(), &[first, last]);
+        assert_eq!(
+            registry.layout_priorities(6),
+            vec![PACK_LAYOUT_PRIORITY + 6, OVER_SIDE_PANEL_PRIORITY + 7]
+        );
+        assert!(!registry.files_after(MAIN_MENU_LAYOUT).iter().any(|file| file.hash == missing));
     }
 
     #[test]

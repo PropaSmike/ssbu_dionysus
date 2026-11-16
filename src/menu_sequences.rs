@@ -34,6 +34,7 @@ static FLOW: AtomicU32 = AtomicU32::new(0);
 static PRELOAD_LOGS: AtomicU32 = AtomicU32::new(0);
 static PRELOADS: AtomicBool = AtomicBool::new(false);
 static EXTENDED: AtomicBool = AtomicBool::new(false);
+static LAYOUTS_PENDING: AtomicBool = AtomicBool::new(false);
 static DIRECT: AtomicU32 = AtomicU32::new(0);
 static MANAGER: AtomicU64 = AtomicU64::new(0);
 
@@ -351,6 +352,9 @@ pub(crate) fn load_all() {
             let Ok(text) = std::fs::read_to_string(directory.join("menu.toml")) else {
                 continue;
             };
+            if !crate::mod_folders::enabled(&directory) {
+                continue;
+            }
             packs.push((
                 directory
                     .file_name()
@@ -447,23 +451,73 @@ pub(crate) fn load_all() {
         }
     }
     settle_modes();
-    let (preloads, layouts, priorities) = registry()
+    let (preloads, has_layouts) = registry()
         .lock()
-        .map(|registry| {
-            (
-                registry.wants_requests(),
-                registry.main_menu_layouts().to_vec(),
-                registry.layout_priorities(MAIN_MENU_LAYOUT_COUNT),
-            )
-        })
+        .map(|registry| (registry.wants_requests(), !registry.main_menu_layouts().is_empty()))
         .unwrap_or_default();
-    let _ = PRIORITIES.set(priorities);
     crate::menu_scripts::install();
     if registry().lock().map(|registry| registry.has_flows()).unwrap_or(false) {
         crate::menu_flow::install();
     }
     install(preloads);
-    if layouts.is_empty() || !PRELOADS.load(Ordering::Acquire) {
+    if !has_layouts || !PRELOADS.load(Ordering::Acquire) {
+        return;
+    }
+    LAYOUTS_PENDING.store(true, Ordering::Release);
+    if crate::mount_events::mounted() {
+        extend_pending();
+    }
+}
+
+type DecompressedSizeFn = unsafe extern "C" fn(u64, *mut usize) -> bool;
+
+#[cfg(not(test))]
+fn served_check() -> Option<impl Fn(u64) -> bool> {
+    let mut address = 0usize;
+    let found = unsafe {
+        skyline::nn::ro::LookupSymbol(&mut address, b"arcrop_get_decompressed_size\0".as_ptr())
+    };
+    if found != 0 || address == 0 {
+        return None;
+    }
+    let size: DecompressedSizeFn = unsafe { core::mem::transmute(address) };
+    let served = move |hash: u64| {
+        let mut bytes = 0usize;
+        unsafe { size(hash & menu::HASH_MASK, &mut bytes) }
+    };
+    served(menu::MAIN_MENU_LAYOUT).then_some(served)
+}
+
+#[cfg(not(test))]
+pub(crate) fn extend_pending() {
+    if !LAYOUTS_PENDING.swap(false, Ordering::AcqRel) {
+        return;
+    }
+    let check = served_check();
+    let checked = check.is_some();
+    let Ok((layouts, priorities, dropped)) = registry().lock().map(|mut registry| {
+        let dropped = match &check {
+            Some(served) => registry.keep_main_menu_layouts(served),
+            None => Vec::new(),
+        };
+        (
+            registry.main_menu_layouts().to_vec(),
+            registry.layout_priorities(MAIN_MENU_LAYOUT_COUNT),
+            dropped,
+        )
+    }) else {
+        return;
+    };
+    for hash in dropped {
+        skyline::println!(
+            "[menuseq] main menu layout {hash:#012x} is not in the game's files (its pack is switched off in ARCropolis, lacks the file, or lost it to a file conflict); left out so the main menu opens"
+        );
+    }
+    if !checked {
+        skyline::println!("[menuseq] ARCropolis cannot say which files it serves; every pack layout is kept");
+    }
+    let _ = PRIORITIES.set(priorities);
+    if layouts.is_empty() {
         return;
     }
     match unsafe { extend_main_menu(&layouts) } {

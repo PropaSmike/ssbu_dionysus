@@ -199,6 +199,9 @@ fn discover() -> Vec<(String, Declaration)> {
         let Ok(text) = std::fs::read_to_string(directory.join(MANIFEST)) else {
             continue;
         };
+        if !crate::mod_folders::enabled(&directory) {
+            continue;
+        }
         manifests.push((
             directory
                 .file_name()
