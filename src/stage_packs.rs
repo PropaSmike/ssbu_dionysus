@@ -14,6 +14,7 @@ pub struct PackDeclaration {
     pub id_name: Option<String>,
     pub forms: Vec<Form>,
     pub ships_battle_tree: bool,
+    pub normal_in_battle_tree: bool,
     pub series: String,
     pub disp_order: i32,
     pub donor: Option<String>,
@@ -294,6 +295,13 @@ fn top_level(
         ("bgm_setting_no", Value::Number(value)) => out.bgm_setting_no = Some(value),
         ("bgm_selector", Value::Flag(flag)) => out.bgm_selector = Some(flag),
         ("ships_battle_tree", Value::Flag(flag)) => out.ships_battle_tree = flag,
+        ("normal_tree", Value::Text(text)) => {
+            out.normal_in_battle_tree = match text.trim().to_ascii_lowercase().as_str() {
+                "normal" => false,
+                "battle" => true,
+                _ => return Err(bad()),
+            }
+        }
         ("disp_order", Value::Number(value)) => out.disp_order = value as i32,
         ("dynamic_collisions", Value::List(items)) => {
             out.dynamic_collisions = items.iter().map(|item| item.to_ascii_lowercase()).collect()
@@ -328,9 +336,9 @@ fn top_level(
         }
         (
             "place" | "display_name" | "id_name" | "series" | "donor" | "resource_place"
-            | "ships_battle_tree" | "disp_order" | "forms" | "bgm" | "bgm_setting_no"
-            | "bgm_selector" | "dynamic_collisions" | "paused_motions" | "secret_of"
-            | "secret_command",
+            | "ships_battle_tree" | "normal_tree" | "disp_order" | "forms" | "bgm"
+            | "bgm_setting_no" | "bgm_selector" | "dynamic_collisions" | "paused_motions"
+            | "secret_of" | "secret_command",
             _,
         ) => return Err(bad()),
         _ => {}
@@ -369,7 +377,8 @@ pub fn parse_all(text: &str) -> Result<Vec<PackDeclaration>, ParseError> {
 impl PackDeclaration {
     pub fn to_clone_stage(&self) -> CloneStage {
         let mut stage = CloneStage::new(&self.place);
-        stage.ships_battle_tree = self.ships_battle_tree;
+        stage.ships_battle_tree = self.ships_battle_tree || self.normal_in_battle_tree;
+        stage.normal_in_battle_tree = self.normal_in_battle_tree;
         stage.forms = self.forms.clone();
         stage.ui_name_id = self.id_name.clone();
         stage.resource_place = self.resource_place.clone();
@@ -486,7 +495,7 @@ pub fn stdat_carries_data(bytes: &[u8]) -> bool {
 }
 
 #[cfg(all(not(test), feature = "stage_mint"))]
-fn ships_stdat(directory: &str, asset_place: &str) -> bool {
+fn ships_stdat(directory: &str, stage: &CloneStage) -> bool {
     fn any_stdat(at: &std::path::Path, depth: usize) -> bool {
         if depth == 0 {
             return false;
@@ -514,8 +523,8 @@ fn ships_stdat(directory: &str, asset_place: &str) -> bool {
         &std::path::Path::new(MOD_ROOT)
             .join(directory)
             .join("stage")
-            .join(asset_place)
-            .join("normal"),
+            .join(stage.asset_place())
+            .join(stage.tree(Form::Normal)),
         6,
     )
 }
@@ -550,7 +559,7 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
         }
     }
 
-    if ships_stdat(directory, stage.asset_place()) {
+    if ships_stdat(directory, &stage) {
         if let Ok(mut registry) = crate::stage_registry::registry().lock() {
             registry.set_owns_stdat(&stage.place_name, true);
         }
@@ -728,6 +737,22 @@ donor        = "photostage"
             pack.forms,
             vec![Form::Normal, Form::Omega, Form::Battlefield]
         );
+    }
+
+    #[test]
+    fn normal_tree_battle_points_every_form_at_the_battle_folder() {
+        let stage = parse(
+            "place = \"x\"\nforms = [\"normal\", \"omega\", \"battlefield\"]\nnormal_tree = \"battle\"",
+        )
+        .unwrap()
+        .to_clone_stage();
+        assert!(stage.ships_battle_tree);
+        assert_eq!(stage.root_path(Form::Normal), "stage/x/battle");
+        assert_eq!(stage.tree(Form::Omega), "battle");
+        assert!(matches!(
+            parse("place = \"x\"\nnormal_tree = \"end\""),
+            Err(ParseError::BadValue { .. })
+        ));
     }
 
     #[test]

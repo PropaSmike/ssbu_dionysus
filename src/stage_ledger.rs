@@ -55,6 +55,7 @@ impl Form {
 pub struct CloneStage {
     pub place_name: String,
     pub ships_battle_tree: bool,
+    pub normal_in_battle_tree: bool,
     pub distribution: u64,
     pub dlc_owner: u64,
     pub resource_place: Option<String>,
@@ -70,6 +71,7 @@ impl CloneStage {
             resource_place: None,
             ui_name_id: None,
             ships_battle_tree: false,
+            normal_in_battle_tree: false,
             distribution: 2,
             dlc_owner: 0,
             aux_template: None,
@@ -85,13 +87,16 @@ impl CloneStage {
         self.resource_place.as_deref().unwrap_or(&self.place_name)
     }
 
-    pub fn root_path(&self, form: Form) -> String {
-        let body = if form != Form::Normal && self.ships_battle_tree {
+    pub fn tree(&self, form: Form) -> &'static str {
+        if self.ships_battle_tree && (form != Form::Normal || self.normal_in_battle_tree) {
             "battle"
         } else {
             "normal"
-        };
-        format!("stage/{}/{}", self.asset_place(), body)
+        }
+    }
+
+    pub fn root_path(&self, form: Form) -> String {
+        format!("stage/{}/{}", self.asset_place(), self.tree(form))
     }
 
     pub fn stage_id_hashes(&self, form: Form) -> [u64; 7] {
@@ -463,6 +468,20 @@ mod tests {
             set.battle.stage_load_group_hash,
             set.end.stage_load_group_hash
         );
+    }
+
+    #[test]
+    fn a_battle_only_stage_loads_the_battle_tree_in_every_form() {
+        let mut stage = CloneStage::new("final_rush");
+        stage.ships_battle_tree = true;
+        stage.normal_in_battle_tree = true;
+        stage.forms = vec![Form::Normal, Form::Omega, Form::Battlefield];
+        for form in [Form::Normal, Form::Omega, Form::Battlefield] {
+            assert_eq!(stage.root_path(form), "stage/final_rush/battle");
+        }
+        stage.normal_in_battle_tree = false;
+        assert_eq!(stage.tree(Form::Normal), "normal");
+        assert_eq!(stage.tree(Form::Battlefield), "battle");
     }
 
     #[test]

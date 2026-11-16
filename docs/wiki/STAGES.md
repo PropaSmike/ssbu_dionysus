@@ -11,6 +11,7 @@ display_name = "Template Stage"   # name on the stage select screen
 id_name = "Template_Stage"        # the message and UI id; lowercased it must equal place
 forms = ["normal", "omega", "battlefield"] # which forms exist
 ships_battle_tree = false         # true only once stage/<place>/battle exists
+normal_tree = "normal"            # "battle": the battle folder supplies every form
 series = "mario"                  # series icon
 disp_order = 121                  # position on the stage select screen
 donor = "battlefield"             # the vanilla stage whose code and gimmicks run
@@ -111,6 +112,12 @@ included. The engine changes only that stage's secret.
 With `ships_battle_tree = false`, the normal folder supplies every form. Set
 it true only once `stage/<place>/battle` exists. A missing folder crashes the
 load; it does not fall back.
+
+A stage made only as a battle form (like a Battlefield-form replacement) sets
+`normal_tree = "battle"`: the battle folder then supplies every form, Normal
+included, and no normal folder is needed. It implies `ships_battle_tree =
+true`. Pick a `donor` without Normal-form gimmicks, such as `battlefield`:
+the Normal form runs the donor's Normal-form code.
 
 Each form can have its own collision, settings, models, camera, effects and
 sounds, so test every form you enable.
