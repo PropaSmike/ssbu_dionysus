@@ -3,6 +3,9 @@ use std::sync::RwLock;
 
 const VANILLA_STAGE_IDS: u32 = 364;
 const STAGE_ID_GETTER: usize = 0x25d5d60;
+const STAGE_HOLDER_VTABLE: usize = 0x50c5cb0;
+const STAGE_HOLDER_ID_GETTER: usize = 0x264efc0;
+const STAGE_HOLDER_STAGE: usize = 0x20;
 const STAGE_RANDOM_SETTINGS: usize = 0x177a980;
 const STAGE_RANDOM_SETTINGS_OPCODE: u32 = 0xfc190fe8;
 const ENEMY_STAGE_FIRST: u32 = 0xc5;
@@ -185,7 +188,18 @@ unsafe fn answers_as_donor(lr: usize) -> bool {
 unsafe extern "C" fn stage_id(stage: usize) -> u32 {
     let lr: usize;
     core::arch::asm!("mov {}, x30", out(reg) lr);
-    let id = read::<u32>(stage + STAGE_ID_FIELD);
+    answer(read::<u32>(stage + STAGE_ID_FIELD), lr)
+}
+
+#[inline(never)]
+unsafe extern "C" fn held_stage_id(holder: usize) -> u32 {
+    let lr: usize;
+    core::arch::asm!("mov {}, x30", out(reg) lr);
+    let stage = read::<usize>(holder + STAGE_HOLDER_STAGE);
+    answer(read::<u32>(stage + STAGE_ID_FIELD), lr)
+}
+
+unsafe fn answer(id: u32, lr: usize) -> u32 {
     if id < VANILLA_STAGE_IDS {
         return id;
     }
@@ -395,6 +409,9 @@ pub(crate) fn install() {
             replaced += 1;
         }
     }
+    let holder_slot = crate::game::addr(STAGE_HOLDER_VTABLE);
+    let holder = unsafe { read::<usize>(holder_slot) } == crate::game::addr(STAGE_HOLDER_ID_GETTER)
+        && unsafe { crate::text_patch::write_bytes(holder_slot, &(held_stage_id as usize).to_le_bytes()) };
     let mut inline = install_inline_sites() + install_load_sites();
     INSTALLED.store(true, Ordering::Release);
     let gate = if enemy_gate_hooked() {
@@ -409,8 +426,9 @@ pub(crate) fn install() {
     skyline::println!("[stagedonor] the second enemy stage test goes through {gate}");
     let random = install_random_settings();
     skyline::println!(
-        "[stagedonor] cloned stages answer their donor's id to per-stage tests: {replaced} of {} stage classes, {} getter call sites, {inline} inline sites, random stage settings {}, fighter scripts",
+        "[stagedonor] cloned stages answer their donor's id to per-stage tests: {replaced} of {} stage classes, the stage holder {}, {} getter call sites, {inline} inline sites, random stage settings {}, fighter scripts",
         STAGE_VTABLES.len(),
+        if holder { "on" } else { "off (its slot holds another function)" },
         GETTER_RETURNS.len(),
         if random { "on" } else { "off (the function holds another instruction)" }
     );
