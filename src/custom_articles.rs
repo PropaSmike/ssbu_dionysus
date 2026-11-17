@@ -470,6 +470,25 @@ pub fn param_lookup_weapon_name(weapon_kind: i32) -> Option<&'static [u8]> {
     custom_weapon_name(weapon_kind)
 }
 
+pub fn own_param_name(weapon_kind: i32) -> Option<&'static [u8]> {
+    if !is_custom_weapon_kind(weapon_kind) {
+        return None;
+    }
+    registry()
+        .read()
+        .ok()?
+        .iter()
+        .find(|article| article.weapon_kind == weapon_kind)
+        .map(|article| article.own_param_name)
+}
+
+pub fn vanilla_weapon_name(weapon_kind: i32) -> Option<&'static CStr> {
+    if weapon_kind < 0 || weapon_kind as usize >= WEAPON_NAME_COUNT {
+        return None;
+    }
+    unsafe { table_string(LOWERCASE_WEAPON_NAMES, weapon_kind as usize) }
+}
+
 pub fn source_weapon_name(weapon_kind: i32) -> Option<&'static CStr> {
     let source = custom_weapon_source_kind(weapon_kind)?;
     unsafe { table_string(LOWERCASE_WEAPON_NAMES, source as usize) }

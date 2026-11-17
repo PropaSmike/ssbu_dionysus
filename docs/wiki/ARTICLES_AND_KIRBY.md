@@ -77,6 +77,11 @@ Ship them in your `vl.prc` as `param_<fighter>_<article>`, for example
 the source's block (`param_bowarrow`) read yours instead, its own vanilla arrow
 included. Needs Smashline 2 on game 13.0.5.
 
+Without a `vl.prc` of your own, set single values: `[params]
+param_arrowlink_arrow.speed = 2.0`, or that block in
+`fighter/<name>/param/vl.prcxml`. Your articles read them, new fields
+included; see [Params of your own](PARAMETERS.md#params-of-your-own).
+
 ## Articles with collision
 
 An article with an `.lvd` file keeps the base's file name inside your folder:

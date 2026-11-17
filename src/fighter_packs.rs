@@ -407,7 +407,9 @@ mod live {
         }
         let from_files =
             crate::param_files::fighter_params(directory, &declaration.resource_name(), &declaration.params);
+        let from_vl = crate::param_files::fighter_vl(directory, &declaration.resource_name(), &declaration.params);
         declaration.params.extend(from_files);
+        declaration.params.extend(from_vl);
         crate::cpu_rows::load_file(directory, &declaration.resource_name(), kind);
         if let Ok(mut packs) = loaded().lock() {
             packs.push(LoadedPack {

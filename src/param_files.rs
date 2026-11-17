@@ -101,6 +101,39 @@ pub(crate) fn fighter_params(directory: &str, resource: &str, declared: &[ParamD
     out
 }
 
+pub(crate) fn fighter_vl(directory: &str, resource: &str, declared: &[ParamDeclaration]) -> Vec<ParamDeclaration> {
+    let name = format!("{}.prcxml", prcxml::VL_FILE);
+    let file_path = path(directory, &["fighter", resource, "param", &name]);
+    let Some(root) = read(&file_path, "fighterpack", directory) else {
+        return Vec::new();
+    };
+    let found = prcxml::vl_params(&root);
+    let taken: Vec<(u64, u64)> = declared
+        .iter()
+        .filter(|known| known.slot.is_none())
+        .map(|known| prcxml::param_key(&known.name))
+        .collect();
+    let mut out: Vec<ParamDeclaration> = Vec::new();
+    let mut kept_back = 0;
+    for (param, value) in found.params {
+        if taken.contains(&prcxml::param_key(&param)) {
+            kept_back += 1;
+            continue;
+        }
+        out.push(ParamDeclaration {
+            name: param,
+            slot: None,
+            op: ParamOp::Set,
+            value,
+        });
+    }
+    skyline::println!(
+        "[fighterpack] {directory}: {name} {}",
+        summary(out.len(), kept_back, &found.skipped, None)
+    );
+    out
+}
+
 pub(crate) fn item_file(directory: &str, resource: &str) -> Option<PathBuf> {
     let name = format!("{}.prcxml", prcxml::ITEM_FILE);
     let inside = |root: &Path| {

@@ -49,6 +49,40 @@ Items take `common_param.prcxml` ([ITEMS.md](ITEMS.md)) and stages
 `item_switch_param.prcxml`, `stage_sound_settings.prcxml` and
 `stage_param.prcxml` ([STAGES.md](STAGES.md)).
 
+## Params of your own
+
+Any key works, not only the game's: a new field in a group or a whole new
+group.
+
+```toml
+[params]
+param_special_n.charge_frames = 30   # a new field in a group the game has
+my_group.speed = 2.25                # a group of your own
+param_fireball.speed = 0.4           # your fireballs: the article's block
+```
+
+Your moveset reads them like any other value:
+
+```rust
+WorkModule::get_param_int(boma, hash40("param_special_n"), hash40("charge_frames"));
+WorkModule::get_param_float(boma, hash40("my_group"), hash40("speed"));
+```
+
+The base and every other fighter read 0 for a key nobody set. ParamConfig
+must be installed.
+
+`fighter/<name>/param/vl.prcxml` does the same with no code and no copy of
+`vl.prc`: every value under a top-level group, or under the first row of a
+top-level list, is set for your clone. Lists inside a group, hash40 values and
+text are left out, and `[params]` wins over the file.
+
+Your articles read their own block: values under `param_<article>` (the
+base's article, `param_fireball`) or `param_<fighter>_<article>` (an article
+of yours) reach the articles your fighter makes, new fields included, and the
+base's keep theirs. An article ignores the group it is asked for, so its code
+can read `get_param_float(boma, hash40("param_fireball"), hash40("speed"))`.
+Only values for every costume reach articles.
+
 ## Your own parameter files
 
 Ship `fighter/<your name>/param/vl.prc` and it is used instead of the
@@ -72,6 +106,8 @@ whatever its index or `name_hash`; no ParamConfig needed) or set it with
 | `fighter_param.prc` attributes (`walk_speed_max`, `jump_y`, `scale`, `weight`, ...) | `[params]`, prcxml |
 | `fighter_param_motion.prc` (`param_motion`), the `fighter/common/param/` files (`common`) | `[params]`, prcxml |
 | throw positions (`param_thrown`) | `[params]` |
+| keys of your own (new fields, new groups) | `[params]`, `vl.prcxml` |
+| your articles' blocks (`param_<article>`) | `[params]`, `vl.prcxml`, your own `vl.prc` |
 | the computer player's row (`fighter/common/ai/param/fighter_param.prc`) | prcxml, `cpu_param` |
 | lists and arrays in `vl.prc` (`hit_data`, ...) | your own `vl.prc` |
 | lists in the common files, `battle_object.prc`, `spirits.prc` | cannot be changed per clone |

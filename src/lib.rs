@@ -163,6 +163,8 @@ mod stage_ledger;
 mod stage_rows;
 #[cfg(feature = "css_slot")]
 mod cpu_rows;
+#[cfg(feature = "css_slot")]
+mod custom_params;
 mod stage_music;
 mod stage_packs;
 mod stage_pane_table;
@@ -2214,6 +2216,11 @@ pub extern "C" fn clone_engine_param_override_v1(
     {
         let key = (param_type, param_hash);
         let slots = [slot];
+        match op {
+            param_overrides::OP_SET => custom_params::note(kind, slot, param_type, param_hash, custom_params::Answer::Float(value as f32)),
+            param_overrides::OP_MUL => custom_params::note(kind, slot, param_type, param_hash, custom_params::Answer::Mul(value as f32)),
+            _ => {}
+        }
         let row_op = match op {
             param_overrides::OP_SET => Some(dionysus_core::fighter_param_row::Op::Set(value)),
             param_overrides::OP_MUL => Some(dionysus_core::fighter_param_row::Op::Mul(value)),
@@ -2268,6 +2275,7 @@ pub extern "C" fn clone_engine_param_int_override_v1(
     #[cfg(feature = "css_slot")]
     {
         let slots = [slot];
+        custom_params::note(kind, slot, param_type, param_hash, custom_params::Answer::Int(value));
         let accepted = unsafe {
             param_overrides::push_int_to_param_config(kind, &slots, (param_type, param_hash), value)
         };
@@ -5147,6 +5155,8 @@ pub fn main() {
     stage_rows::install();
     #[cfg(feature = "css_slot")]
     cpu_rows::install();
+    #[cfg(feature = "css_slot")]
+    custom_params::install();
     stage_collision_probe::install();
 
     #[cfg(feature = "stage_mint")]

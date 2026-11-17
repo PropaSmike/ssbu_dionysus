@@ -432,6 +432,63 @@ pub fn fighter_params(file: &str, root: &Node) -> Option<FighterParams> {
     Some(out)
 }
 
+pub const VL_FILE: &str = "vl";
+
+fn vl_value(value: &Value) -> Result<ParamValue, Why> {
+    match value {
+        Value::Float(value) => Ok(ParamValue::Float(*value)),
+        Value::Int(value) => Ok(ParamValue::Int((*value).clamp(i32::MIN as i64, i32::MAX as i64) as i32)),
+        Value::Bool(value) => Ok(ParamValue::Int(i32::from(*value))),
+        Value::Hash(_) => Err(Why::Hash),
+        Value::Text(_) => Err(Why::Text),
+    }
+}
+
+pub fn vl_params(root: &Node) -> FighterParams {
+    let mut out = FighterParams {
+        rows: 1,
+        ..Default::default()
+    };
+    for (group, node) in top_level(root) {
+        let first_row = match node {
+            Node::List(entries) => match entries.iter().map(|(_, entry)| entry).find(|entry| !is_dummy(entry)) {
+                Some(row @ Node::Struct(_)) => Some(row),
+                Some(_) => Some(node),
+                None => None,
+            },
+            _ => Some(node),
+        };
+        match first_row {
+            None => {}
+            Some(Node::Value(value)) => match vl_value(value) {
+                Ok(value) => out.params.push((format!("{group:#x}"), value)),
+                Err(why) => out.skipped.push(Skipped { field: format!("{group:#x}"), why }),
+            },
+            Some(Node::Struct(fields)) => {
+                for (field, node) in fields {
+                    let name = format!("{group:#x}.{field:#x}");
+                    match node {
+                        Node::Value(value) => match vl_value(value) {
+                            Ok(value) => out.params.push((name, value)),
+                            Err(why) => out.skipped.push(Skipped { field: name, why }),
+                        },
+                        _ => out.skipped.push(Skipped { field: name, why: Why::Container }),
+                    }
+                }
+            }
+            Some(_) => out.skipped.push(Skipped { field: format!("{group:#x}"), why: Why::Container }),
+        }
+    }
+    out
+}
+
+pub fn param_key(name: &str) -> (u64, u64) {
+    match name.split_once('.') {
+        Some((group, field)) => (key(group), key(field)),
+        None => (key(name), 0),
+    }
+}
+
 pub const ITEM_FILE: &str = "common_param";
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -822,6 +879,38 @@ mod tests {
         let out = stage_area(&partial);
         assert_eq!(out.area, None);
         assert_eq!(out.missing, vec!["y0", "x1"]);
+    }
+
+    #[test]
+    fn a_vl_file_gives_every_scalar_by_group_and_field() {
+        let root = parse(
+            "<struct><struct hash=\"param_special_n\"><float hash=\"charge_speed\">1.5</float><bool hash=\"is_new\">true</bool><hash40 hash=\"effect\">sys_fire</hash40></struct><int hash=\"top_level\">3</int><list hash=\"hit_data\"><float index=\"0\">1</float></list></struct>",
+        )
+        .unwrap();
+        let out = vl_params(&root);
+        let group = hash40("param_special_n");
+        assert_eq!(
+            out.params,
+            vec![
+                (format!("{group:#x}.{:#x}", hash40("charge_speed")), ParamValue::Float(1.5)),
+                (format!("{group:#x}.{:#x}", hash40("is_new")), ParamValue::Int(1)),
+                (format!("{:#x}", hash40("top_level")), ParamValue::Int(3)),
+            ]
+        );
+        let why: Vec<Why> = out.skipped.iter().map(|skip| skip.why).collect();
+        assert_eq!(why, vec![Why::Hash, Why::Container]);
+        assert_eq!(param_key(&out.params[0].0), (group, hash40("charge_speed")));
+        assert_eq!(param_key("param_special_n.charge_speed"), (group, hash40("charge_speed")));
+        assert_eq!(param_key("weight"), (hash40("weight"), 0));
+        let article = parse(
+            "<struct><list hash=\"param_fireball\"><struct index=\"0\"><float hash=\"speed\">0.4</float></struct><struct index=\"1\"><float hash=\"speed\">9</float></struct></list></struct>",
+        )
+        .unwrap();
+        let out = vl_params(&article);
+        assert_eq!(
+            out.params,
+            vec![(format!("{:#x}.{:#x}", hash40("param_fireball"), hash40("speed")), ParamValue::Float(0.4))]
+        );
     }
 
     #[test]
