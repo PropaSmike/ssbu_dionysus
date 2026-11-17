@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering};
 
 pub use dionysus_macros::hook;
 pub use crate::manifest::{
-    register_fighter_manifest, register_item_manifest, ArticleLvd, Grab, Hurtbox, ItemManifest,
+    register_fighter_manifest, register_item_manifest, ArticleLvd, Feature, Grab, Hurtbox, ItemManifest,
     LvdVertex, Manifest, Motion,
 };
 pub use crate::slot;
@@ -208,7 +208,16 @@ impl Fighter {
             );
             return Ok(kind);
         }
-        let kind = register_fighter_manifest(self.identity, &manifest.to_toml())?;
+        let built = crate::compiled_capabilities();
+        let supported = |feature: Feature| built & crate::feature_capability(feature) != 0;
+        for feature in manifest.features().into_iter().filter(|feature| !supported(*feature)) {
+            elog!(
+                "[clone_engine] {}: this Dionysus has no {}, so it is left out",
+                self.identity,
+                feature.describe()
+            );
+        }
+        let kind = register_fighter_manifest(self.identity, &manifest.to_toml_with(supported))?;
         self.kind.store(kind, Ordering::Release);
         Ok(kind)
     }

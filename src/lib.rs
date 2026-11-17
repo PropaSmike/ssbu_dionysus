@@ -532,6 +532,9 @@ pub extern "C" fn clone_engine_runtime_capabilities_v1() -> u64 {
         capabilities &= !dionysus_api::CAP_PARAMCONFIG_BRIDGE;
     }
     if shared_hooks::status() & dionysus_api::SHARED_HOOK_STATUS_READY == 0 {
+        let _ = shared_hooks::initialize();
+    }
+    if shared_hooks::status() & dionysus_api::SHARED_HOOK_STATUS_READY == 0 {
         capabilities &= !dionysus_api::CAP_SHARED_HOOKS;
     }
     #[cfg(feature = "css_slot")]

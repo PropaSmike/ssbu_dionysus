@@ -43,15 +43,6 @@ pub const COSTUMES: u8 = 8;
 /// The vanilla fighter the clone is built on, by resource name.
 pub const BASE: &str = "mario";
 
-/// The engine features this pack uses. `runtime_capabilities()` is what the
-/// installed engine has AND passed its checks for on this boot.
-const NEEDED: u64 = dionysus_api::CAP_FIGHTER_IDENTITY
-    | dionysus_api::CAP_SMASHLINE_BRIDGE
-    | dionysus_api::CAP_FIGHTER_ARTICLES
-    | dionysus_api::CAP_PARAMCONFIG_BRIDGE
-    | dionysus_api::CAP_KIRBY_COPY
-    | dionysus_api::CAP_SHARED_HOOKS;
-
 extern "C" fn mods_mounted() {
     // work that needs the mods' files mounted by ARCropolis goes here
     dionysus_api::elog!("[template_v2] mods mounted");
@@ -59,14 +50,11 @@ extern "C" fn mods_mounted() {
 
 #[skyline::main(name = "dionysus_moveset_template_v2")]
 pub fn main() {
-    let missing = NEEDED & !dionysus_api::runtime_capabilities();
-    if missing != 0 {
-        dionysus_api::elog!("[template_v2] disabled: the engine lacks capabilities {missing:#x}");
-        return;
-    }
-
     // The same declaration can be a fighter.toml beside config.json; the engine
     // then registers at boot and register() below just returns that kind.
+    // A table the installed Dionysus cannot read (a global motion, a grab, the
+    // HUD, command inputs, a tether...) is left out by register(), which logs it;
+    // the rest of the fighter still registers.
     let manifest = Manifest::new(
         "template_fighter", // name: folder under fighter/, Smashline agent name, identity
         BASE,               // base: the vanilla fighter it is built on
@@ -97,56 +85,35 @@ pub fn main() {
 
     // A throw with its own opponent pose: every fighter, clones included, gets
     // THROWN with no animation, and the opponent plays this fighter's file
-    // (throws.rs starts it). An engine without global motions would refuse the
-    // whole manifest, so the motion is only declared when it is supported.
-    let manifest = if dionysus_api::runtime_capabilities() & dionysus_api::CAP_GLOBAL_MOTIONS != 0 {
-        manifest.global_motion(
-            Motion::victim(throws::THROWN)       // the opponent's motion name, the same on every fighter
-                .animation(throws::THROWN_FILE), // this fighter's own file; fighters that do not ship it get none
-        )
-    } else {
-        manifest
-    };
+    // (throws.rs starts it).
+    let manifest = manifest.global_motion(
+        Motion::victim(throws::THROWN)       // the opponent's motion name, the same on every fighter
+            .animation(throws::THROWN_FILE), // this fighter's own file; fighters that do not ship it get none
+    );
 
     // A command grab: the engine accepts the CATCH box in acmd::game_specials.
     // For a Ganondorf-style hold instead, ask for CATCHED_GANON, go to a status
     // of your own, and ship catched_ganon, catched_ganon_dx and
     // catched_ganon_girl in your motion list: every opponent plays your file.
-    let manifest = if dionysus_api::runtime_capabilities() & dionysus_api::CAP_GRAB_RULES != 0 {
-        manifest.grab(
-            Grab::new(*FIGHTER_STATUS_KIND_SPECIAL_S)        // the grabber status the CATCH box is out in
-                .victim(*FIGHTER_STATUS_KIND_CAPTURE_PULLED) // the status the box gives the opponent
-                .then(*FIGHTER_STATUS_KIND_CATCH_PULL),      // the grabber's status once caught: an ordinary grab from here
-        )
-    } else {
-        manifest
-    };
+    let manifest = manifest.grab(
+        Grab::new(*FIGHTER_STATUS_KIND_SPECIAL_S)        // the grabber status the CATCH box is out in
+            .victim(*FIGHTER_STATUS_KIND_CAPTURE_PULLED) // the status the box gives the opponent
+            .then(*FIGHTER_STATUS_KIND_CATCH_PULL),      // the grabber's status once caught: an ordinary grab from here
+    );
 
     // Joker's Rebellion gauge by this fighter's portrait; hud.rs fills it.
     // .hud_layout("ui/layout/hud/template_fighter/layout.arc") draws a layout
     // the pack ships instead, or as well.
-    let manifest = if dionysus_api::runtime_capabilities() & dionysus_api::CAP_HUD != 0 {
-        manifest.hud("jack") // the fighter whose HUD it shows
-    } else {
-        manifest
-    };
+    let manifest = manifest.hud("jack"); // the fighter whose HUD it shows
 
     // The game's command inputs and one of this fighter's own, read in fight.rs.
-    let manifest = if dionysus_api::runtime_capabilities() & dionysus_api::CAP_COMMAND_INPUTS != 0 {
-        fight::commands(manifest)
-    } else {
-        manifest
-    };
+    let manifest = fight::commands(manifest);
 
     // Samus's air tether and ledge grab, off until tether.rs is filled in and
     // her beam is minted above with .article("template_gbeam", "samus/gbeam").
-    // let manifest = if dionysus_api::runtime_capabilities() & dionysus_api::CAP_TETHER != 0 {
-    //     manifest
-    //         .tether("samus")                        // the donor: its air_lasso_data and ledge boxes
-    //         .tether_box([60.0, 48.0], [5.0, -34.0]) // a ledge box of your own, two corners from the fighter
-    // } else {
-    //     manifest
-    // };
+    // let manifest = manifest
+    //     .tether("samus")                        // the donor: its air_lasso_data and ledge boxes
+    //     .tether_box([60.0, 48.0], [5.0, -34.0]); // a ledge box of your own, two corners from the fighter
 
     // More a manifest can declare, in docs/wiki/FIGHTERS.md:
     // .partner(true): a copy of this fighter follows it, the way Nana follows Popo

@@ -255,7 +255,7 @@ Several fighters in one file: `[[fighter]]` blocks, with `[[fighter.article]]`,
 | `own_status(n)` | Status number `n` of your fighter's own, counted from 0 past the base's statuses. Call after `register`; -1 before. |
 | `set_vtable_entry(n, f)` | Write one vtable entry; returns the previous. |
 | `set_common_vtable_entry(n, f)`, `set_copy_common_vtable_entry(n, f, &ORIGINAL)` | [Common vtables](#common-vtables). |
-| `register(manifest)` | Above. |
+| `register(manifest)` | Above. A table the installed Dionysus cannot read (global motions, grabs, HUD, Final Smash, tether, move list, command inputs, partner and switch groups) is left out and logged; the rest registers. |
 
 Compare fighters with `is` and `owns`; `utility::get_kind` answers the base.
 
@@ -488,7 +488,8 @@ Two syntaxes, by where the game reads the value.
 
 `vl.prc` values, read through `WorkModule::get_param_*`, which ParamConfig
 hooks. Its calls, with the clone's kind where the base kind was; `vec![-1]`
-is every costume.
+is every costume. The `param_config` crate carries ParamConfig itself, so
+the calls work whether or not `libparam_config.nro` is installed.
 
 ```rust
 let kind = WAWA.kind().get().unwrap();                 // the clone's kind, in place of *FIGHTER_KIND_SAMUS
@@ -842,7 +843,8 @@ See [On every player's card](wiki/FIGHTERS.md#on-every-players-card).
 | Function | Meaning |
 |---|---|
 | `api_version()` | Installed engine version. |
-| `compiled_capabilities()`, `runtime_capabilities()` | `CAP_*` bits built in, and passing this boot. |
+| `compiled_capabilities()`, `runtime_capabilities()` | `CAP_*` bits built in, and passing this boot. `register` already leaves out what the installed Dionysus lacks; use these only to branch your own code. |
+| `feature_capability(Feature)` | The `CAP_*` bit of a manifest feature. |
 | `max_custom_kind()` | Highest fighter kind accepted. |
 | `kind_for_identity("fighter_kind_<name>")` | The kind given to that identity. |
 | `smashline_bridge_version()`, `smashline_compatible()` | Smashline build found. |

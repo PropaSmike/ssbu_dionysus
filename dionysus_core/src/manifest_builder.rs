@@ -192,9 +192,85 @@ fn push_lvd_vertices(out: &mut String, lvd: &ArticleLvd) {
     }
 }
 
+const GAME_SWITCH_BASES: [&str; 5] = ["eflame", "elight", "pzenigame", "pfushigisou", "plizardon"];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Feature {
+    GlobalMotions,
+    Grabs,
+    Hud,
+    FinalSmash,
+    Tether,
+    MoveList,
+    Commands,
+    EntryGroups,
+    AnyBaseGroups,
+}
+
+impl Feature {
+    pub const ALL: [Feature; 9] = [
+        Feature::GlobalMotions,
+        Feature::Grabs,
+        Feature::Hud,
+        Feature::FinalSmash,
+        Feature::Tether,
+        Feature::MoveList,
+        Feature::Commands,
+        Feature::EntryGroups,
+        Feature::AnyBaseGroups,
+    ];
+
+    pub fn describe(self) -> &'static str {
+        match self {
+            Feature::GlobalMotions => "global motions",
+            Feature::Grabs => "command grabs",
+            Feature::Hud => "the HUD",
+            Feature::FinalSmash => "the borrowed Final Smash",
+            Feature::Tether => "the tether",
+            Feature::MoveList => "move list pages",
+            Feature::Commands => "command inputs",
+            Feature::EntryGroups => "the partner or switch group",
+            Feature::AnyBaseGroups => "partners and switch groups on this base",
+        }
+    }
+
+    pub fn of_table(header: &str) -> Option<Feature> {
+        let name = header.trim().trim_start_matches('[').trim_end_matches(']').trim();
+        match name.split('.').next().unwrap_or("") {
+            "global_motion" => Some(Feature::GlobalMotions),
+            "grab" => Some(Feature::Grabs),
+            "hud" => Some(Feature::Hud),
+            "final" => Some(Feature::FinalSmash),
+            "tether" => Some(Feature::Tether),
+            "move_list" => Some(Feature::MoveList),
+            "commands" | "command" => Some(Feature::Commands),
+            "partner_params" => Some(Feature::AnyBaseGroups),
+            _ => None,
+        }
+    }
+}
+
+fn raw_features(raw: &str) -> Vec<Feature> {
+    let mut found = Vec::new();
+    for line in raw.lines() {
+        if !line.trim_start().starts_with('[') {
+            continue;
+        }
+        if let Some(feature) = Feature::of_table(line) {
+            if !found.contains(&feature) {
+                found.push(feature);
+            }
+        }
+    }
+    found
+}
+
 pub struct Manifest {
     name: String,
+    base: String,
     fighter: Vec<String>,
+    entry: Vec<String>,
+    entry_feature: Option<Feature>,
     articles: Vec<Vec<String>>,
     article_hurtboxes: Vec<(String, Hurtbox)>,
     article_lvds: Vec<(String, ArticleLvd)>,
@@ -219,10 +295,13 @@ impl Manifest {
     pub fn new(name: &str, base: &str) -> Self {
         Self {
             name: name.to_string(),
+            base: base.to_ascii_lowercase(),
             fighter: vec![
                 format!("name = {}", quoted(name)),
                 format!("base = {}", quoted(base)),
             ],
+            entry: Vec::new(),
+            entry_feature: None,
             articles: Vec::new(),
             article_hurtboxes: Vec::new(),
             article_lvds: Vec::new(),
@@ -298,17 +377,71 @@ impl Manifest {
         self.text("item_hand", hand)
     }
 
+    fn entry_line(mut self, line: String, any_base: bool) -> Self {
+        self.entry.push(line);
+        if any_base {
+            self.entry_feature = Some(Feature::AnyBaseGroups);
+        } else if self.entry_feature.is_none() {
+            self.entry_feature = Some(Feature::EntryGroups);
+        }
+        self
+    }
+
     pub fn partner(self, enabled: bool) -> Self {
-        self.number("partner", enabled)
+        let any_base = enabled && self.base != "popo";
+        self.entry_line(format!("partner = {enabled}"), any_base)
     }
 
     pub fn partner_with(self, fighter: &str) -> Self {
-        self.text("partner", fighter)
+        self.entry_line(format!("partner = {}", quoted(fighter)), true)
     }
 
     pub fn switch_with(self, members: &[&str]) -> Self {
         let list = members.iter().map(|member| format!("\"{member}\"")).collect::<Vec<_>>().join(", ");
-        self.number("switch", format!("[{list}]"))
+        let any_base = !GAME_SWITCH_BASES.contains(&self.base.as_str());
+        self.entry_line(format!("switch = [{list}]"), any_base)
+    }
+
+    pub fn features(&self) -> Vec<Feature> {
+        let mut used = Vec::new();
+        let mut add = |feature: Feature| {
+            if !used.contains(&feature) {
+                used.push(feature);
+            }
+        };
+        if !self.global_motions.is_empty() {
+            add(Feature::GlobalMotions);
+        }
+        if !self.grabs.is_empty() {
+            add(Feature::Grabs);
+        }
+        if self.hud.is_some() || self.hud_layout.is_some() {
+            add(Feature::Hud);
+        }
+        if self.final_smash.is_some() {
+            add(Feature::FinalSmash);
+        }
+        if self.tether.is_some() {
+            add(Feature::Tether);
+        }
+        if self.move_list.is_some() {
+            add(Feature::MoveList);
+        }
+        if !self.command_settings.is_empty() || !self.commands.is_empty() {
+            add(Feature::Commands);
+        }
+        if let Some(feature) = self.entry_feature {
+            add(feature);
+        }
+        if !self.partner_params.is_empty() {
+            add(Feature::AnyBaseGroups);
+        }
+        for raw in &self.raw {
+            for feature in raw_features(raw) {
+                add(feature);
+            }
+        }
+        used
     }
 
     pub fn own_css(self) -> Self {
@@ -578,10 +711,20 @@ impl Manifest {
     }
 
     pub fn to_toml(&self) -> String {
+        self.to_toml_with(|_| true)
+    }
+
+    pub fn to_toml_with(&self, keep: impl Fn(Feature) -> bool) -> String {
         let mut out = String::from("[fighter]\n");
         for line in &self.fighter {
             out.push_str(line);
             out.push('\n');
+        }
+        if self.entry_feature.is_some_and(&keep) {
+            for line in &self.entry {
+                out.push_str(line);
+                out.push('\n');
+            }
         }
         let mut placed = vec![false; self.article_hurtboxes.len()];
         let mut lvd_placed = vec![false; self.article_lvds.len()];
@@ -655,33 +798,34 @@ impl Manifest {
                 out.push_str(&format!("\n[[kirby.mesh]]\nname = {}\nvisible = {visible}\n", quoted(name)));
             }
         }
-        for motion in &self.global_motions {
+        for motion in self.global_motions.iter().filter(|_| keep(Feature::GlobalMotions)) {
             out.push_str("\n[[global_motion]]\n");
             for line in &motion.lines {
                 out.push_str(line);
                 out.push('\n');
             }
         }
-        for grab in &self.grabs {
+        for grab in self.grabs.iter().filter(|_| keep(Feature::Grabs)) {
             out.push_str("\n[[grab]]\n");
             for line in grab.lines() {
                 out.push_str(&line);
                 out.push('\n');
             }
         }
-        if self.hud.is_some() || self.hud_layout.is_some() {
+        let hud = keep(Feature::Hud);
+        if hud && (self.hud.is_some() || self.hud_layout.is_some()) {
             out.push_str("\n[hud]\n");
         }
-        if let Some(donor) = &self.hud {
+        if let Some(donor) = self.hud.as_ref().filter(|_| hud) {
             out.push_str(&format!("from = {}\n", quoted(donor)));
         }
-        if let Some(path) = &self.hud_layout {
+        if let Some(path) = self.hud_layout.as_ref().filter(|_| hud) {
             out.push_str(&format!("layout = {}\n", quoted(path)));
         }
-        if let Some(donor) = &self.final_smash {
+        if let Some(donor) = self.final_smash.as_ref().filter(|_| keep(Feature::FinalSmash)) {
             out.push_str(&format!("\n[final]\nfrom = {}\n", quoted(donor)));
         }
-        if let Some(tether) = &self.tether {
+        if let Some(tether) = self.tether.as_ref().filter(|_| keep(Feature::Tether)) {
             out.push_str("\n[tether]\n");
             if let Some(donor) = &tether.from {
                 out.push_str(&format!("from = {}\n", quoted(donor)));
@@ -696,7 +840,7 @@ impl Manifest {
                 ));
             }
         }
-        if let Some(list) = &self.move_list {
+        if let Some(list) = self.move_list.as_ref().filter(|_| keep(Feature::MoveList)) {
             out.push_str("\n[move_list]\n");
             if let Some(pages) = list.pages {
                 out.push_str(&format!("pages = {pages}\n"));
@@ -728,27 +872,28 @@ impl Manifest {
                 }
             }
         }
-        if !self.partner_params.is_empty() {
+        if !self.partner_params.is_empty() && keep(Feature::AnyBaseGroups) {
             out.push_str("\n[partner_params]\n");
             for (name, value) in &self.partner_params {
                 out.push_str(&format!("{name} = {value}\n"));
             }
         }
-        if !self.command_settings.is_empty() {
+        let commands = keep(Feature::Commands);
+        if commands && !self.command_settings.is_empty() {
             out.push_str("\n[commands]\n");
             for line in self.command_settings.toml_lines() {
                 out.push_str(&line);
                 out.push('\n');
             }
         }
-        for command in &self.commands {
+        for command in self.commands.iter().filter(|_| commands) {
             out.push_str("\n[[command]]\n");
             for line in command.toml_lines() {
                 out.push_str(&line);
                 out.push('\n');
             }
         }
-        for raw in &self.raw {
+        for raw in self.raw.iter().filter(|raw| raw_features(raw).into_iter().all(&keep)) {
             out.push('\n');
             out.push_str(raw);
             if !raw.ends_with('\n') {
@@ -1170,6 +1315,45 @@ mod tests {
         assert!(text.contains("switch = [\"wawab\", \"wawac\"]"), "{text}");
         let fighters = crate::fighter_toml::parse_all(&text).unwrap();
         assert_eq!(fighters[0].switch_with, vec!["wawab".to_string(), "wawac".to_string()]);
+    }
+
+    #[test]
+    fn features_name_every_table_an_older_engine_would_refuse() {
+        let manifest = Manifest::new("wawa", "mario")
+            .hud("mario")
+            .tether("link")
+            .move_list(2)
+            .partner(true)
+            .raw("[[global_motion]]\nname = \"x\"\n");
+        let used = manifest.features();
+        for feature in [Feature::Hud, Feature::Tether, Feature::MoveList, Feature::AnyBaseGroups, Feature::GlobalMotions] {
+            assert!(used.contains(&feature), "{feature:?} in {used:?}");
+        }
+        assert!(!used.contains(&Feature::Grabs));
+        assert_eq!(Manifest::new("wawa", "popo").partner(false).features(), vec![Feature::EntryGroups]);
+        assert_eq!(Manifest::new("wawa", "pzenigame").switch_with(&["a"]).features(), vec![Feature::EntryGroups]);
+        assert_eq!(Manifest::new("wawa", "mario").switch_with(&["a"]).features(), vec![Feature::AnyBaseGroups]);
+        assert!(Manifest::new("wawa", "mario").costumes(8).features().is_empty());
+    }
+
+    #[test]
+    fn a_left_out_feature_drops_only_its_own_tables() {
+        let manifest = Manifest::new("wawa", "mario")
+            .hud("mario")
+            .tether("link")
+            .partner_with("wawab")
+            .raw("[[global_motion]]\nname = \"x\"\n")
+            .raw("[kirby]\nstatuses = 1\n");
+        let text = manifest.to_toml_with(|feature| feature != Feature::Tether && feature != Feature::GlobalMotions);
+        assert!(text.contains("[hud]"), "{text}");
+        assert!(text.contains("partner = \"wawab\""), "{text}");
+        assert!(text.contains("[kirby]"), "{text}");
+        assert!(!text.contains("[tether]"), "{text}");
+        assert!(!text.contains("global_motion"), "{text}");
+        let text = manifest.to_toml_with(|feature| feature != Feature::AnyBaseGroups);
+        assert!(!text.contains("partner"), "{text}");
+        assert_eq!(manifest.to_toml(), manifest.to_toml_with(|_| true));
+        assert!(crate::fighter_toml::parse_all(&manifest.to_toml_with(|_| false)).is_ok());
     }
 
     #[test]

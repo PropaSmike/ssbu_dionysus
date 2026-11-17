@@ -510,7 +510,8 @@ if let Some(lr) = fight::command_lr(fighter, "geyser") {
 - Computer players enter the game's commands only on a Ryu, Ken or Terry
   base. `cpu` gives them your command when they press its button (not with
   `button = "none"`); a press reads at most one command, in order.
-- Check `runtime_capabilities() & CAP_COMMAND_INPUTS` for older engines.
+- On an older Dionysus, `register` leaves the command tables out and logs it;
+  a `fighter.toml` with them needs a release that has them.
 - `custom_fighters/template_v2/src/fight.rs` throws the fireball on
   41236 + special.
 
@@ -712,7 +713,8 @@ Manifest::new("my_fighter", "captain").move_list(6).move_list_images(&[1, 4])
   refill as they turn.
 - A vanilla fighter with `ext_skill_page_num` above 4 in `ui_chara_db` pages
   the same way.
-- Check `runtime_capabilities() & CAP_MOVE_LIST_PAGES` for older engines.
+- On an older Dionysus, `register` leaves `[move_list]` out and logs it; a
+  `fighter.toml` with it needs a release that has it.
 
 ## Final Smash backgrounds and movies
 

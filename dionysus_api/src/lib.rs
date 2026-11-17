@@ -660,6 +660,21 @@ fn resolve(slot: &AtomicUsize, symbol: &'static [u8]) -> Option<usize> {
     Some(address)
 }
 
+pub fn feature_capability(feature: manifest::Feature) -> u64 {
+    use manifest::Feature;
+    match feature {
+        Feature::GlobalMotions => CAP_GLOBAL_MOTIONS,
+        Feature::Grabs => CAP_GRAB_RULES,
+        Feature::Hud => CAP_HUD,
+        Feature::FinalSmash => CAP_FINAL_SMASH,
+        Feature::Tether => CAP_TETHER,
+        Feature::MoveList => CAP_MOVE_LIST_PAGES,
+        Feature::Commands => CAP_COMMAND_INPUTS,
+        Feature::EntryGroups => CAP_ENTRY_GROUPS,
+        Feature::AnyBaseGroups => CAP_ANY_BASE_GROUPS,
+    }
+}
+
 pub fn api_version() -> Option<u32> {
     let address = resolve(&API_VERSION_FN, b"clone_engine_api_version\0")?;
     let function: ApiVersionFn = unsafe { std::mem::transmute(address) };
