@@ -16,6 +16,9 @@ pub struct PackDeclaration {
     pub ships_battle_tree: bool,
     pub normal_in_battle_tree: bool,
     pub hazards: Option<bool>,
+    pub items_start: Option<String>,
+    pub items_off: Vec<String>,
+    pub items_on: Vec<String>,
     pub series: String,
     pub disp_order: i32,
     pub donor: Option<String>,
@@ -130,12 +133,31 @@ pub fn parse(text: &str) -> Result<PackDeclaration, ParseError> {
     let mut saw_forms = false;
     let mut section: Option<Section> = None;
 
-    for (index, raw) in text.lines().enumerate() {
-        let line = strip_comment(raw).trim();
-        if line.is_empty() {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut next = 0usize;
+    while next < lines.len() {
+        let number = next + 1;
+        let mut joined = strip_comment(lines[next]).trim().to_string();
+        next += 1;
+        if joined.is_empty() {
             continue;
         }
-        let number = index + 1;
+        let opens_list = joined
+            .split_once('=')
+            .map(|(_, value)| value.trim_start().starts_with('[') && !value.contains(']'))
+            .unwrap_or(false);
+        if opens_list {
+            while next < lines.len() {
+                let more = strip_comment(lines[next]).trim();
+                next += 1;
+                joined.push(' ');
+                joined.push_str(more);
+                if more.contains(']') {
+                    break;
+                }
+            }
+        }
+        let line = joined.as_str();
         if let Some(kind) = gimmick_header(line) {
             close(&mut out, section.take())?;
             section = Some(match kind {
@@ -304,6 +326,15 @@ fn top_level(
             }
         }
         ("hazards", Value::Flag(flag)) => out.hazards = Some(flag),
+        ("items_start", Value::Text(text)) => {
+            let text = text.trim().to_ascii_lowercase();
+            if text != "donor" && text != "all" {
+                return Err(bad());
+            }
+            out.items_start = Some(text)
+        }
+        ("items_off", Value::List(items)) => out.items_off = items,
+        ("items_on", Value::List(items)) => out.items_on = items,
         ("disp_order", Value::Number(value)) => out.disp_order = value as i32,
         ("dynamic_collisions", Value::List(items)) => {
             out.dynamic_collisions = items.iter().map(|item| item.to_ascii_lowercase()).collect()
@@ -340,12 +371,18 @@ fn top_level(
             "place" | "display_name" | "id_name" | "series" | "donor" | "resource_place"
             | "ships_battle_tree" | "normal_tree" | "hazards" | "disp_order" | "forms" | "bgm"
             | "bgm_setting_no" | "bgm_selector" | "dynamic_collisions" | "paused_motions"
-            | "secret_of" | "secret_command",
+            | "secret_of" | "secret_command" | "items_start" | "items_off" | "items_on",
             _,
         ) => return Err(bad()),
         _ => {}
     }
     Ok(())
+}
+
+impl PackDeclaration {
+    pub fn has_item_rule(&self) -> bool {
+        self.items_start.is_some() || !self.items_off.is_empty() || !self.items_on.is_empty()
+    }
 }
 
 pub fn parse_all(text: &str) -> Result<Vec<PackDeclaration>, ParseError> {
@@ -581,6 +618,36 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
         );
     }
 
+    #[cfg(feature = "css_slot")]
+    {
+        if declaration.has_item_rule() {
+            let start_all =
+                declaration.items_start.as_deref() == Some("all") || declaration.donor.is_none();
+            let resolved = dionysus_core::stage_items::resolve(
+                start_all,
+                &declaration.items_off,
+                &declaration.items_on,
+            );
+            for stage_id in &stage_ids {
+                crate::stage_items::set_rule(*stage_id, resolved.rule.clone());
+            }
+            skyline::println!(
+                "[stagepack] {}: starts from {} for items, then {} off and {} on",
+                stage.place_name,
+                if start_all { "all of them" } else { "its donor's list" },
+                resolved.rule.off.len(),
+                resolved.rule.on.len(),
+            );
+            if !resolved.unknown.is_empty() {
+                skyline::println!(
+                    "[stagepack] {}: no item called {}; items_off and items_on take the game's names (moon, kasey, warpstar)",
+                    stage.place_name,
+                    resolved.unknown.join(", "),
+                );
+            }
+        }
+    }
+
     if ships_stdat(directory, &stage) {
         if let Ok(mut registry) = crate::stage_registry::registry().lock() {
             registry.set_owns_stdat(&stage.place_name, true);
@@ -775,6 +842,42 @@ donor        = "photostage"
             parse("place = \"x\"\nnormal_tree = \"end\""),
             Err(ParseError::BadValue { .. })
         ));
+    }
+
+    #[test]
+    fn item_keys_take_a_start_and_two_lists() {
+        let pack = parse(
+            "place = \"x\"
+items_start = \"All\"
+items_off = [\"moon\", \"kasey\"]
+items_on = []",
+        )
+        .unwrap();
+        assert_eq!(pack.items_start.as_deref(), Some("all"));
+        assert_eq!(pack.items_off, vec!["moon".to_string(), "kasey".to_string()]);
+        assert!(pack.items_on.is_empty());
+        assert!(pack.has_item_rule());
+        assert!(!parse("place = \"x\"").unwrap().has_item_rule());
+        assert_eq!(
+            parse("place = \"x\"
+items_start = \"some\""),
+            Err(ParseError::BadValue { line: 2, key: "items_start".to_string() })
+        );
+    }
+
+    #[test]
+    fn a_list_may_run_over_several_lines() {
+        let pack = parse(
+            "place = \"x\"
+items_off = [
+  \"moon\",  # the Moon
+  \"warpstar\",
+]
+disp_order = 5",
+        )
+        .unwrap();
+        assert_eq!(pack.items_off, vec!["moon".to_string(), "warpstar".to_string()]);
+        assert_eq!(pack.disp_order, 5);
     }
 
     #[test]

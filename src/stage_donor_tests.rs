@@ -91,7 +91,7 @@ const fn identity_ids() -> [u32; VANILLA_STAGE_IDS as usize] {
     ids
 }
 
-fn enabled() -> bool {
+pub(crate) fn enabled() -> bool {
     crate::settings::get().stage_donor_tests
 }
 

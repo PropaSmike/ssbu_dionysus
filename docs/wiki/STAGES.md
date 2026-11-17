@@ -32,13 +32,33 @@ with `content_donor`.
 
 A stage with `donor` also answers as its donor wherever the game or a fighter
 tests for one particular stage (a camera, an item rule, a Final Smash on
-Mishima Dojo) and when the match draws its random setup (Minecraft World,
-Super Mario Maker). Everything else still sees your stage's own id: its
+Mishima Dojo), when it picks the items, Assist Trophies and Poké Ball Pokémon
+the donor leaves out, and when the match draws its random setup (Minecraft
+World, Super Mario Maker). Everything else still sees your stage's own id: its
 files, name and records. `stage_donor_tests = false` in
 `sd:/ultimate/dionysus/settings.toml` turns this off.
 
 stage_config's `gimmick_param` cannot name a cloned stage, so it never reaches
 yours: use `hazards`.
+
+## Items
+
+Each stage leaves out some items, Assist Trophies and Poké Ball Pokémon: King
+of Fighters Stadium leaves out 43, Final Destination only Nikki. Yours starts
+from its donor's list, and three keys change it:
+
+```toml
+items_start = "donor"          # "donor" (the default) or "all": nothing left out
+items_off = ["moon", "heart"]  # also left out
+items_on = ["mushroom"]        # let back in
+```
+
+Names are the game's: `heart`, `moon`, `kasey` (Abra), `kabigon` (Snorlax). A
+name in both lists stays out. A list may run over several lines, but an older
+Dionysus refuses the whole `stage.toml` over that, so the Workbench writes one. The
+Workbench's Pick items button shows every one by its English name. A stage
+without `donor` starts from all. The players' item switch still applies on
+top. `stage_donor_tests = false` drops the donor's list but not these keys.
 
 ## Stage parameters
 
@@ -47,6 +67,11 @@ in your own folder: a Suzaku Castle clone ships
 `stage/<place>/normal/param/sf_suzaku.stdat`, never `<place>.stdat`. A renamed
 file loads but is never read, and the stage runs on built-in values. The
 Workbench linter lists the names each donor reads.
+
+Star KOs and Screen KOs follow `can_futtobi_back` and `can_futtobi_front` in
+your `stageparam_<place>.stprm`, not your donor. Copy the donor's file to keep
+its rules, or set the two flags yourself. Stages that travel (Wuhu Island, Delfino Plaza, Skyloft) switch numbered
+`.stprm` files per section: keep the donor's set.
 
 Stage-select icons (`stage_<N>_<id_name>.bntx`, `id_name` lowercased) go
 under `ui/replace/stage/stage_<N>/` or, as the patch-era stages' do,
