@@ -44,8 +44,47 @@ pub(crate) fn set_rule(stage_id: u32, rule: ItemRule) {
     }
 }
 
+#[derive(Clone, Default)]
+struct PlaceEdit {
+    start_all: Option<bool>,
+    items: Vec<(i32, bool)>,
+}
+
+static PLACE_EDITS: Mutex<Option<HashMap<u64, PlaceEdit>>> = Mutex::new(None);
+
+fn edit_place(place: u64, change: impl FnOnce(&mut PlaceEdit)) {
+    if let Ok(mut edits) = PLACE_EDITS.lock() {
+        change(edits.get_or_insert_with(HashMap::new).entry(place).or_default());
+    }
+    if let Ok(mut built) = BUILT.lock() {
+        *built = None;
+    }
+}
+
 fn rule_for(stage_id: u32) -> Option<ItemRule> {
-    RULES.lock().ok()?.as_ref()?.get(&stage_id).cloned()
+    let base = RULES.lock().ok().and_then(|rules| rules.as_ref()?.get(&stage_id).cloned());
+    let edit = crate::stage_rows::place_of(stage_id)
+        .and_then(|(place, _)| PLACE_EDITS.lock().ok()?.as_ref()?.get(&place).cloned());
+    let Some(edit) = edit else {
+        return base;
+    };
+    let mut rule = base.unwrap_or_else(|| ItemRule {
+        start_all: crate::stage_dispatch::donor_for(stage_id).is_none(),
+        ..Default::default()
+    });
+    if let Some(all) = edit.start_all {
+        rule.start_all = all;
+    }
+    for (kind, on) in edit.items {
+        rule.off.retain(|known| *known != kind);
+        rule.on.retain(|known| *known != kind);
+        if on {
+            rule.on.push(kind);
+        } else {
+            rule.off.push(kind);
+        }
+    }
+    Some(rule)
 }
 
 unsafe fn read<T: Copy>(address: usize) -> T {
@@ -174,4 +213,28 @@ pub(crate) fn install() {
     }
     skyline::install_hooks!(first_lookup, second_lookup, first_hit, second_hit);
     skyline::println!("[stageitems] cloned stages leave out their donor's items, or the ones their stage.toml names");
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn clone_engine_stage_item_set(place: u64, item: *const core::ffi::c_char, on: i32) -> i32 {
+    if item.is_null() {
+        return -2;
+    }
+    let Ok(name) = core::ffi::CStr::from_ptr(item).to_str() else {
+        return -2;
+    };
+    let Some(kind) = dionysus_core::item_kinds::item_kind(name) else {
+        return -2;
+    };
+    edit_place(place, |edit| {
+        edit.items.retain(|(known, _)| *known != kind);
+        edit.items.push((kind, on != 0));
+    });
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn clone_engine_stage_items_start(place: u64, all: i32) -> i32 {
+    edit_place(place, |edit| edit.start_all = Some(all != 0));
+    0
 }

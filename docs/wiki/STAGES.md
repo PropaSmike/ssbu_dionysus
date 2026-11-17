@@ -60,6 +60,13 @@ Workbench's Pick items button shows every one by its English name. A stage
 without `donor` starts from all. The players' item switch still applies on
 top. `stage_donor_tests = false` drops the donor's list but not these keys.
 
+A prcxml made for `item/common/param/item_switch_param.prc` works from
+`stage/<place>/normal/param/item_switch_param.prcxml` (`battle/param/` with
+`normal_tree = "battle"`). Dionysus reads the
+`table` of its first `itsw_normal` row, whatever its index or `name`: each
+entry switches the item at that position off (0) or on. It applies after
+`items_start` and before `items_off` and `items_on`.
+
 ## Stage parameters
 
 A donor's code reads its `.stdat` files by file name. Keep the donor's names
@@ -72,6 +79,26 @@ Star KOs and Screen KOs follow `can_futtobi_back` and `can_futtobi_front` in
 your `stageparam_<place>.stprm`, not your donor. Copy the donor's file to keep
 its rules, or set the two flags yourself. Stages that travel (Wuhu Island, Delfino Plaza, Skyloft) switch numbered
 `.stprm` files per section: keep the donor's set.
+
+Reverb, the sound settings and the box computer players weigh come from your
+donor's rows in `param/sound/stage_sound_settings.prc` and
+`fighter/common/ai/param/stage_param.prc`. Without `donor` (or with
+`stage_donor_tests = false`) a stage has no reverb, scale 1, offset 0 and no
+box. To set your own, ship a prcxml made for those files in
+`stage/<place>/normal/param/`:
+
+| File | Read from its first row |
+|---|---|
+| `stage_sound_settings.prcxml` | `info_`: `reverb_type_`, `scale_`, `offset_` |
+| `stage_param.prcxml` | `area`: `x0`, `y0`, `x1`, `y1` (all four) |
+
+The row index, `place_id_` and `stage_name` do not matter. `reverb_type_` is
+one of 11 presets: 0 none, 1 outdoors, 2 to 4 small, medium and large rooms,
+10 Hanenbow's delay. A sound field you leave out keeps the donor's value.
+
+A plugin can set the same rows and the item keys by `place`:
+`dionysus_api::stage::set_reverb`, `set_sound_scale`, `set_sound_offset`,
+`set_cpu_area`, `set_items_start` and `set_item` ([API](../API.md#stages)).
 
 Stage-select icons (`stage_<N>_<id_name>.bntx`, `id_name` lowercased) go
 under `ui/replace/stage/stage_<N>/` or, as the patch-era stages' do,

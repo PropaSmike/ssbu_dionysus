@@ -448,10 +448,87 @@ mod live {
             skyline::println!("[itempack] {directory}: spawn keys are for single items; the family appears as its base does");
         }
         register_tables(directory, declaration, kind);
+        for member in listed.iter().skip(1) {
+            if let Some(member_kind) = crate::item_clones::item_kind_for_identity(member) {
+                register_param_file(directory, member, member_kind, &[]);
+            }
+        }
         Some(kind)
     }
 
+    fn register_param_file(directory: &str, resource: &str, kind: i32, common: &[(String, ItemPackValue)]) {
+        use crate::item_clones::{
+            clone_engine_item_common_set, clone_engine_item_common_set_hash, clone_engine_item_common_set_i32,
+            clone_engine_item_common_set_label,
+        };
+        use dionysus_core::item_common_row::{describe, Table};
+        use dionysus_core::prcxml::{Skipped, Value, Why};
+        let Some(path) = crate::param_files::item_file(directory, resource) else {
+            return;
+        };
+        let Some(root) = crate::param_files::read(&path, "itempack", directory) else {
+            return;
+        };
+        let row = dionysus_core::prcxml::item_row(&root);
+        let taken: Vec<u64> = common.iter().map(|(field, _)| dionysus_core::hash40(field)).collect();
+        let mut skipped = row.skipped.clone();
+        let mut set = 0;
+        let mut kept_back = 0;
+        let mut refused = 0;
+        for (field, value) in &row.fields {
+            if taken.contains(field) {
+                kept_back += 1;
+                continue;
+            }
+            let float = crate::item_params::common_field_offset(*field).is_some();
+            let table = describe(*field);
+            let result = match (float, table, value) {
+                (true, _, Value::Float(value)) => Ok(clone_engine_item_common_set(kind, *field, *value as f32)),
+                (true, _, Value::Int(value)) => Ok(clone_engine_item_common_set(kind, *field, *value as f32)),
+                (true, _, Value::Bool(value)) => {
+                    Ok(clone_engine_item_common_set(kind, *field, f32::from(u8::from(*value))))
+                }
+                (false, Some((Table::Word, _)), Value::Int(value)) => {
+                    Ok(clone_engine_item_common_set_i32(kind, *field, *value as i32))
+                }
+                (false, Some((Table::Word, _)), Value::Bool(value)) => {
+                    Ok(clone_engine_item_common_set_i32(kind, *field, i32::from(*value)))
+                }
+                (false, Some((Table::Word, _)), Value::Float(value)) => {
+                    Ok(clone_engine_item_common_set_i32(kind, *field, value.round() as i32))
+                }
+                (false, Some((Table::Word, _)), Value::Hash(label)) => {
+                    Ok(clone_engine_item_common_set_label(kind, *field, *label))
+                }
+                (false, Some((Table::Hash, _)), Value::Hash(value)) => {
+                    Ok(clone_engine_item_common_set_hash(kind, *field, *value))
+                }
+                (false, None, _) => Err(Why::Unknown),
+                _ => Err(Why::Type),
+            };
+            match result {
+                Ok(0) => set += 1,
+                Ok(_) => refused += 1,
+                Err(why) => skipped.push(Skipped {
+                    field: table
+                        .map(|(_, name)| name.to_string())
+                        .unwrap_or_else(|| format!("{field:#x}")),
+                    why,
+                }),
+            }
+        }
+        let mut text = crate::param_files::summary(set, kept_back, &skipped, Some(row.rows));
+        if refused > 0 {
+            text.push_str(&format!("; {refused} refused, see the itemclone lines"));
+        }
+        skyline::println!(
+            "[itempack] {directory}: {resource} {} {text}",
+            crate::param_files::file_name(&path)
+        );
+    }
+
     fn register_tables(directory: &str, declaration: &ItemPackDeclaration, public_kind: i32) {
+        register_param_file(directory, &declaration.resource_name, public_kind, &declaration.common);
         for (field, value) in &declaration.common {
             let hash = dionysus_core::hash40(field);
             let result = match value {

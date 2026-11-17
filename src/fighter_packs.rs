@@ -189,7 +189,7 @@ mod live {
         first
     }
 
-    fn register(directory: &'static str, declaration: FighterDeclaration) -> Option<i32> {
+    fn register(directory: &'static str, mut declaration: FighterDeclaration) -> Option<i32> {
         let Some(base_kind) = crate::custom_articles::fighter_kind_from_str(&declaration.base) else {
             skyline::println!(
                 "[fighterpack] {directory}: base {:?} is not a fighter name; the pack is not registered",
@@ -405,6 +405,10 @@ mod live {
                 &declaration.base_resource_name(),
             );
         }
+        let from_files =
+            crate::param_files::fighter_params(directory, &declaration.resource_name(), &declaration.params);
+        declaration.params.extend(from_files);
+        crate::cpu_rows::load_file(directory, &declaration.resource_name(), kind);
         if let Ok(mut packs) = loaded().lock() {
             packs.push(LoadedPack {
                 directory,
@@ -745,7 +749,7 @@ mod live {
             let mut applied = 0;
             for param in &params {
                 let (name, sub) = match param.name.split_once('.') {
-                    Some((name, sub)) => (name, dionysus_core::hash40(sub)),
+                    Some((name, sub)) => (name, dionysus_core::prcxml::key(sub)),
                     None => (param.name.as_str(), 0),
                 };
                 let slot = param.slot.unwrap_or(crate::param_overrides::ANY_SLOT);
@@ -754,7 +758,7 @@ mod live {
                         crate::clone_engine_param_int_override_v1(
                             kind,
                             slot,
-                            dionysus_core::hash40(name),
+                            dionysus_core::prcxml::key(name),
                             sub,
                             *value,
                         )
@@ -763,7 +767,7 @@ mod live {
                         crate::clone_engine_param_override_v1(
                             kind,
                             slot,
-                            dionysus_core::hash40(name),
+                            dionysus_core::prcxml::key(name),
                             sub,
                             match op {
                                 dionysus_core::fighter_toml::ParamOp::Set => {

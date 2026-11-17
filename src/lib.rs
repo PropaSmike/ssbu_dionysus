@@ -65,6 +65,8 @@ mod enemy_spawn;
 #[cfg(feature = "item_clone_backend")]
 mod enemy_clones;
 #[cfg(feature = "item_clone_backend")]
+mod enemy_rows;
+#[cfg(feature = "item_clone_backend")]
 mod enemy_packs;
 #[cfg(feature = "item_clone_backend")]
 mod enemy_drivers;
@@ -140,6 +142,7 @@ mod menu_scripts;
 #[cfg(feature = "css_slot")]
 mod menu_sequences;
 mod mod_folders;
+mod param_files;
 #[cfg(feature = "css_slot")]
 mod menu_backdrop;
 #[cfg(feature = "css_slot")]
@@ -156,6 +159,10 @@ mod stage_donor_tests;
 #[cfg(feature = "css_slot")]
 mod stage_items;
 mod stage_ledger;
+#[cfg(feature = "css_slot")]
+mod stage_rows;
+#[cfg(feature = "css_slot")]
+mod cpu_rows;
 mod stage_music;
 mod stage_packs;
 mod stage_pane_table;
@@ -337,6 +344,14 @@ fn clone_definition(kind: i32) -> Option<&'static CloneDefinition> {
         .iter()
         .copied()
         .find(|definition| definition.kind == kind)
+}
+
+pub(crate) fn clone_kind_hash(kind: i32) -> Option<u64> {
+    clone_definition(kind).map(|definition| hash40(definition.fighter_kind_name))
+}
+
+pub(crate) fn clone_base_of(kind: i32) -> Option<i32> {
+    clone_base(kind)
 }
 
 #[cfg(feature = "css_slot")]
@@ -4110,6 +4125,8 @@ unsafe fn fighter_ai_setup_hook(ai: *mut u8, path: *const u8) -> u64 {
     if !ai.is_null() {
         let field = ai.add(AI_KIND) as *mut i32;
         let kind = core::ptr::read_volatile(field);
+        #[cfg(feature = "css_slot")]
+        cpu_rows::note_ai(ai as usize, clone_base(kind).map(|_| kind));
         if let Some(base) = clone_base(kind) {
             core::ptr::write_volatile(field, base);
             if AI_SETUP_LOGGED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 16 {
@@ -5126,6 +5143,10 @@ pub fn main() {
     stage_donor_tests::install();
     #[cfg(all(feature = "stage_mint_places", feature = "css_slot"))]
     stage_items::install();
+    #[cfg(all(feature = "stage_mint_places", feature = "css_slot"))]
+    stage_rows::install();
+    #[cfg(feature = "css_slot")]
+    cpu_rows::install();
     stage_collision_probe::install();
 
     #[cfg(feature = "stage_mint")]

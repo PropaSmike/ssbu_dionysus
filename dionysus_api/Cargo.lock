@@ -3,14 +3,6 @@
 version = 4
 
 [[package]]
-name = "dionysus_api"
-version = "0.1.0-beta.1"
-dependencies = [
- "skyline 0.6.0 (git+https://github.com/ultimate-research/skyline-rs.git?rev=6b52d321275639f26c2371d8142550ba0013a5e4)",
- "skyline_smash",
-]
-
-[[package]]
 name = "compile-time-lua-bind-hash"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18,7 +10,30 @@ checksum = "660bcccd4aaa4836cb685952d9ea4fb2b57d2565f4fd0c492fce4d2c0a1be0c0"
 dependencies = [
  "lua_bind_hash",
  "quote",
- "syn",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "dionysus_api"
+version = "0.7.0-beta.1"
+dependencies = [
+ "dionysus_core",
+ "dionysus_macros",
+ "skyline 0.6.0 (git+https://github.com/ultimate-research/skyline-rs.git?rev=6b52d321275639f26c2371d8142550ba0013a5e4)",
+ "skyline_smash",
+]
+
+[[package]]
+name = "dionysus_core"
+version = "0.7.0-beta.1"
+
+[[package]]
+name = "dionysus_macros"
+version = "0.7.0-beta.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -114,7 +129,7 @@ dependencies = [
  "lazy_static",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -125,13 +140,13 @@ dependencies = [
  "lazy_static",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
 name = "skyline_smash"
 version = "0.1.0"
-source = "git+https://github.com/ultimate-research/skyline-smash.git?rev=58aee32a5838379cadd120c8e62fd0e0ea9e5ad7#58aee32a5838379cadd120c8e62fd0e0ea9e5ad7"
+source = "git+https://github.com/ultimate-research/skyline-smash#d2ca90d9ecffdf9bf58efe6bcf4dd49f62ea1435"
 dependencies = [
  "compile-time-lua-bind-hash",
  "lazy_static",
@@ -146,6 +161,17 @@ name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
+version = "2.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
 dependencies = [
  "proc-macro2",
  "quote",

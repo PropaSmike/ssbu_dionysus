@@ -51,6 +51,12 @@ follow the item switch of your base item: when the player turns the base off,
 your item is off too. Several items in one pack are `[[item]]` blocks with
 the same keys (engines after `0.2.1-beta.1`).
 
+A prcxml made for `item/common/param/param.prc` sets the same row from
+`item/wawa/param/common_param.prcxml` (`assist/` or `pokemon/` for those
+families; each member reads its own folder). The row index does not matter
+and `name` is ignored: the row is your item's. `[common]` and the plugin's
+`.common` win over it, and the boot log names anything left out.
+
 Statuses are registered at startup, by name; they are the base item's and the
 lines are `Setting`, `JointSrt`, `Init`, `Update`, `Coroutine`, `Exit`.
 

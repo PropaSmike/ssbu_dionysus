@@ -5,6 +5,7 @@ pub struct ItemRule {
     pub start_all: bool,
     pub off: Vec<i32>,
     pub on: Vec<i32>,
+    pub table: Vec<(u16, u8)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -42,6 +43,8 @@ pub fn row(rule: &ItemRule, base: &[u8], mapping: &[i32]) -> Vec<u8> {
                 0
             } else if rule.on.contains(&kind) {
                 1
+            } else if let Some((_, flag)) = rule.table.iter().find(|(at, _)| usize::from(*at) == index) {
+                u8::from(*flag != 0)
             } else if rule.start_all {
                 1
             } else {
@@ -79,7 +82,7 @@ mod tests {
 
     #[test]
     fn the_donor_row_is_kept_where_the_author_says_nothing() {
-        let rule = ItemRule { start_all: false, off: vec![22], on: vec![26] };
+        let rule = ItemRule { start_all: false, off: vec![22], on: vec![26], table: vec![] };
         let base = [1, 1, 0, 0, 1];
         let mapping = [21, 22, 25, 26, 228];
         assert_eq!(row(&rule, &base, &mapping), vec![1, 0, 0, 1, 1]);
@@ -87,14 +90,20 @@ mod tests {
 
     #[test]
     fn starting_from_all_ignores_the_donor_row() {
-        let rule = ItemRule { start_all: true, off: vec![228], on: vec![] };
+        let rule = ItemRule { start_all: true, off: vec![228], on: vec![], table: vec![] };
         assert_eq!(row(&rule, &[0, 0, 0], &[22, 25, 228]), vec![1, 1, 0]);
     }
 
     #[test]
     fn off_wins_over_on() {
-        let rule = ItemRule { start_all: true, off: vec![22], on: vec![22] };
+        let rule = ItemRule { start_all: true, off: vec![22], on: vec![22], table: vec![] };
         assert_eq!(row(&rule, &[1], &[22]), vec![0]);
+    }
+
+    #[test]
+    fn a_param_file_row_sits_between_the_start_and_the_lists() {
+        let rule = ItemRule { start_all: false, off: vec![228], on: vec![], table: vec![(0, 0), (1, 1), (2, 1)] };
+        assert_eq!(row(&rule, &[1, 0, 1, 0], &[22, 25, 228, 26]), vec![0, 1, 0, 0]);
     }
 
     #[test]

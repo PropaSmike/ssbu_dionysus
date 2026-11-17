@@ -95,6 +95,7 @@ pub(crate) fn register(base: u32, name: &str) -> i32 {
     BASES[kind as usize].store(base as i32, Ordering::Release);
     NEXT.store(kind + 1, Ordering::Release);
     skyline::println!("[enemyclone] {name} = enemy kind {kind} on {base}");
+    crate::enemy_rows::load_file(kind, name);
     kind as i32
 }
 
@@ -120,35 +121,60 @@ macro_rules! base_kind_sites {
 base_kind_sites! {
     object_scale_param = 0x565d30, 8, 0x7100111f;
     object_search_param = 0x565f58, 8, 0x7100111f;
-    object_common_row_a = 0x566114, 8, 0x7100111f;
-    object_common_row_b = 0x566528, 8, 0x7100111f;
     object_param_table_c = 0x566aac, 8, 0x7100111f;
     object_kind_work_int = 0x566828, 1, 0xf9405108;
     object_setup_tail = 0x566cd4, 8, 0x7100111f;
-    object_common_row_c = 0x567188, 21, 0x710012bf;
-    object_common_row_d = 0x56731c, 21, 0x710012bf;
-    object_common_row_e = 0x567f58, 21, 0x710012bf;
-    object_common_row_f = 0x56827c, 21, 0x710012bf;
     object_param_table_a = 0x56834c, 8, 0x7100111f;
     object_param_table_b = 0x5685d8, 8, 0x7100111f;
-    object_common_row_g = 0x5696c0, 22, 0x710012df;
-    object_common_row_h = 0x5699a4, 9, 0x8b091509;
     object_setup_scale = 0x56a384, 8, 0x7100111f;
-    request_common_row_a = 0x56e600, 9, 0x7100113f;
-    request_common_row_b = 0x56e690, 9, 0x7100113f;
     descriptor_kind_table = 0x571e54, 9, 0xb8697908;
-    descriptor_common_row = 0x571e74, 8, 0x7100111f;
     descriptor_param_tables = 0x571f3c, 8, 0x7100111f;
     descriptor_tail = 0x572104, 8, 0x7100111f;
     kind_factory = 0x57fa70, 20, 0x7100129f;
-    foreign_common_row_a = 0x90e8b4, 8, 0x7100111f;
-    foreign_common_row_b = 0xb9f960, 8, 0x7100111f;
-    foreign_common_row_c = 0xe627a8, 8, 0x8b081528;
     foreign_param_table = 0x34b0274, 25, 0x7100133f;
-    foreign_common_row_d = 0x34b19f0, 8, 0x5280450a;
-    foreign_common_row_e = 0x34b284c, 21, 0xf9420d08;
-    foreign_common_row_f = 0x3516878, 8, 0x8b081528;
     thrown_node_kind = 0x154724c, 12, 0x6b0c01df;
+}
+
+macro_rules! row_kind_sites {
+    ($($name:ident = $row:literal, $offset:literal, $register:literal, $opcode:literal;)*) => {
+        $(
+            #[skyline::hook(offset = crate::game::rel($offset), inline)]
+            unsafe fn $name(ctx: &mut skyline::hooks::InlineCtx) {
+                let kind = ctx.registers[$register].w();
+                let base = base_of(kind);
+                crate::enemy_rows::note($row, ctx.sp.x(), kind, base.is_some());
+                if let Some(base) = base {
+                    ctx.registers[$register].set_x(base as u64);
+                }
+            }
+        )*
+
+        const ROW_KIND_SITES: &[(usize, u32)] = &[$(($offset, $opcode)),*];
+
+        fn install_row_kind_sites() {
+            skyline::install_hooks!($($name),*);
+        }
+    };
+}
+
+row_kind_sites! {
+    object_common_row_a = 0, 0x566114, 8, 0x7100111f;
+    object_common_row_b = 1, 0x566528, 8, 0x7100111f;
+    object_common_row_c = 2, 0x567188, 21, 0x710012bf;
+    object_common_row_d = 3, 0x56731c, 21, 0x710012bf;
+    object_common_row_e = 4, 0x567f58, 21, 0x710012bf;
+    object_common_row_f = 5, 0x56827c, 21, 0x710012bf;
+    object_common_row_g = 6, 0x5696c0, 22, 0x710012df;
+    object_common_row_h = 7, 0x5699a4, 9, 0x8b091509;
+    request_common_row_a = 8, 0x56e600, 9, 0x7100113f;
+    request_common_row_b = 9, 0x56e690, 9, 0x7100113f;
+    descriptor_common_row = 10, 0x571e74, 8, 0x7100111f;
+    foreign_common_row_a = 11, 0x90e8b4, 8, 0x7100111f;
+    foreign_common_row_b = 12, 0xb9f960, 8, 0x7100111f;
+    foreign_common_row_c = 13, 0xe627a8, 8, 0x8b081528;
+    foreign_common_row_d = 14, 0x34b19f0, 8, 0x5280450a;
+    foreign_common_row_e = 15, 0x34b284c, 21, 0xf9420d08;
+    foreign_common_row_f = 16, 0x3516878, 8, 0x8b081528;
 }
 
 #[skyline::hook(offset = crate::game::rel(OFF_PATH_GUARD), inline)]
@@ -256,6 +282,8 @@ unsafe fn ai_get_kind(id: u32) -> i32 {
 pub(crate) fn install() {
     let sites = BASE_KIND_SITES
         .iter()
+        .chain(ROW_KIND_SITES)
+        .chain(crate::enemy_rows::sites())
         .chain(PATH_NAME_SITES)
         .chain(core::iter::once(&(OFF_PATH_GUARD, PATH_GUARD_OPCODE)))
         .chain(core::iter::once(&(OFF_KIND_SWITCH, KIND_SWITCH_OPCODE)))
@@ -269,13 +297,15 @@ pub(crate) fn install() {
         }
     }
     install_base_kind_sites();
+    install_row_kind_sites();
+    crate::enemy_rows::install();
     install_path_name_sites();
     skyline::install_hooks!(path_guard, kind_switch, ai_get_kind);
     install_enemy_kind_loads();
     INSTALLED.store(true, Ordering::Release);
     skyline::println!(
         "[enemyclone] {} kind sites and {} path sites patched; enemy kind tests and fighter AI see a clone's base",
-        BASE_KIND_SITES.len() + 1 + ENEMY_KIND_LOADS.len(),
+        BASE_KIND_SITES.len() + ROW_KIND_SITES.len() + 1 + ENEMY_KIND_LOADS.len(),
         PATH_NAME_SITES.len() + 1
     );
 }

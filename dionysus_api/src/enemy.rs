@@ -17,6 +17,7 @@ static SPAWN_FN: AtomicUsize = AtomicUsize::new(0);
 static START_FN: AtomicUsize = AtomicUsize::new(0);
 static OBJECT_FN: AtomicUsize = AtomicUsize::new(0);
 static CLONE_FN: AtomicUsize = AtomicUsize::new(0);
+static COMMON_FN: AtomicUsize = AtomicUsize::new(0);
 static CLASS_STATUS_FN: AtomicUsize = AtomicUsize::new(0);
 static DRIVE_FN: AtomicUsize = AtomicUsize::new(0);
 static REMOVE_FN: AtomicUsize = AtomicUsize::new(0);
@@ -113,6 +114,10 @@ pub fn object(index: u32) -> u32 {
     };
     let function: ObjectFn = unsafe { std::mem::transmute(address) };
     unsafe { function(index) }
+}
+
+pub fn set_common(kind: u32, field: &str, value: impl Into<crate::RowValue>) -> Result<(), Error> {
+    crate::row_set(&COMMON_FN, b"clone_engine_enemy_common_set\0", kind as i32, field, value.into())
 }
 
 pub fn clone(base: u32, name: &str) -> Result<u32, Error> {

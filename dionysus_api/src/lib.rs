@@ -510,6 +510,60 @@ pub enum Error {
     Engine(i32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RowValue {
+    Float(f32),
+    Int(i32),
+    Bool(bool),
+    Hash(u64),
+}
+
+impl RowValue {
+    pub(crate) fn tagged(self) -> (u32, u64) {
+        use dionysus_core::row_fields::{TAG_BOOL, TAG_F32, TAG_HASH, TAG_I32};
+        match self {
+            RowValue::Float(value) => (TAG_F32, u64::from(value.to_bits())),
+            RowValue::Int(value) => (TAG_I32, u64::from(value as u32)),
+            RowValue::Bool(value) => (TAG_BOOL, u64::from(value)),
+            RowValue::Hash(value) => (TAG_HASH, value),
+        }
+    }
+}
+
+impl From<f32> for RowValue {
+    fn from(value: f32) -> Self {
+        RowValue::Float(value)
+    }
+}
+
+impl From<i32> for RowValue {
+    fn from(value: i32) -> Self {
+        RowValue::Int(value)
+    }
+}
+
+impl From<bool> for RowValue {
+    fn from(value: bool) -> Self {
+        RowValue::Bool(value)
+    }
+}
+
+type RowSetFn = unsafe extern "C" fn(i32, u64, u32, u64) -> i32;
+
+pub(crate) fn row_set(slot: &AtomicUsize, symbol: &'static [u8], kind: i32, field: &str, value: RowValue) -> Result<(), Error> {
+    let (tag, bits) = value.tagged();
+    row_call(slot, symbol, kind, field, tag, bits)
+}
+
+pub(crate) fn row_call(slot: &AtomicUsize, symbol: &'static [u8], kind: i32, field: &str, tag: u32, bits: u64) -> Result<(), Error> {
+    let address = resolve(slot, symbol).ok_or(Error::EngineUnavailable)?;
+    let function: RowSetFn = unsafe { core::mem::transmute(address) };
+    match unsafe { function(kind, dionysus_core::prcxml::key(field), tag, bits) } {
+        0 => Ok(()),
+        code => Err(Error::Engine(code)),
+    }
+}
+
 type ApiVersionFn = unsafe extern "C" fn() -> u32;
 type CapabilitiesFn = unsafe extern "C" fn() -> u64;
 type MaxCustomKindFn = unsafe extern "C" fn() -> i32;

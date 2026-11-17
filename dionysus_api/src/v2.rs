@@ -308,6 +308,13 @@ impl Fighter {
         Article::new(self, name, true)
     }
 
+    pub fn cpu_param(&self, name: &str) -> CpuParam {
+        CpuParam {
+            kind: self.kind().get(),
+            name: name.to_string(),
+        }
+    }
+
     pub fn param(&self, name: &str) -> Param<'_> {
         Param {
             fighter: self,
@@ -496,6 +503,41 @@ impl Article {
             0,
         );
         true
+    }
+}
+
+static CPU_PARAM_FN: AtomicUsize = AtomicUsize::new(0);
+
+pub fn cpu_param(kind: i32, name: &str) -> CpuParam {
+    CpuParam {
+        kind: Some(kind),
+        name: name.to_string(),
+    }
+}
+
+pub struct CpuParam {
+    kind: Option<i32>,
+    name: String,
+}
+
+impl CpuParam {
+    fn apply(&self, tag: u32, bits: u64) -> bool {
+        let Some(kind) = self.kind else {
+            return false;
+        };
+        crate::row_call(&CPU_PARAM_FN, b"clone_engine_cpu_param_set\0", kind, &self.name, tag, bits).is_ok()
+    }
+
+    pub fn set(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_F32, u64::from((value as f32).to_bits()))
+    }
+
+    pub fn mul(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_MUL, u64::from((value as f32).to_bits()))
+    }
+
+    pub fn int(self, value: i32) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_I32, u64::from(value as u32))
     }
 }
 

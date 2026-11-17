@@ -620,21 +620,31 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
 
     #[cfg(feature = "css_slot")]
     {
-        if declaration.has_item_rule() {
+        let table = crate::param_files::stage_item_table(
+            directory,
+            &[stage.place_name.as_str(), stage.asset_place()],
+            stage.tree(Form::Normal),
+        );
+        if declaration.has_item_rule() || table.is_some() {
             let start_all =
                 declaration.items_start.as_deref() == Some("all") || declaration.donor.is_none();
-            let resolved = dionysus_core::stage_items::resolve(
+            let mut resolved = dionysus_core::stage_items::resolve(
                 start_all,
                 &declaration.items_off,
                 &declaration.items_on,
             );
+            let from_file = table.as_ref().map(|table| table.len());
+            resolved.rule.table = table.unwrap_or_default();
             for stage_id in &stage_ids {
                 crate::stage_items::set_rule(*stage_id, resolved.rule.clone());
             }
             skyline::println!(
-                "[stagepack] {}: starts from {} for items, then {} off and {} on",
+                "[stagepack] {}: starts from {} for items{}, then {} off and {} on",
                 stage.place_name,
                 if start_all { "all of them" } else { "its donor's list" },
+                from_file
+                    .map(|count| format!(", takes {count} from item_switch_param.prcxml"))
+                    .unwrap_or_default(),
                 resolved.rule.off.len(),
                 resolved.rule.on.len(),
             );
@@ -645,6 +655,15 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
                     resolved.unknown.join(", "),
                 );
             }
+        }
+        let places = [stage.place_name.as_str(), stage.asset_place()];
+        let tree = stage.tree(Form::Normal);
+        let place_hash = crate::stage_ledger::hash40(&stage.place_name);
+        if let Some(sound) = crate::param_files::stage_sound(directory, &places, tree) {
+            crate::stage_rows::set_sound(place_hash, sound);
+        }
+        if let Some(area) = crate::param_files::stage_area(directory, &places, tree) {
+            crate::stage_rows::set_area(place_hash, area);
         }
     }
 

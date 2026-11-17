@@ -34,6 +34,8 @@ pub mod owner_param_words;
 pub mod param_swap;
 pub mod partner_params;
 pub mod prc;
+pub mod prcxml;
+pub mod row_fields;
 pub mod settings;
 pub mod slots;
 pub mod stage_gimmicks;

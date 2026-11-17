@@ -575,6 +575,28 @@ param_special_hi.y_spd_air = 2.0      # costume 3 only; a vl.prc value, pushed t
 | `common` | a top-level field of `common.prc`, `item.prc`, `etc.prc`, `power_up.prc`, `effect.prc`, `sound.prc` | Lists inside them and the ~40 match-level fields (handicap, team attack, finish camera, area wind, `power_up_point_min`) stay global. |
 | `param_thrown` | holder: `offset`, `offset_f`, `offset_b`, `offset_hi`, `offset_lw`; victim: `held_offset`; each also `_x`, `_y`, `_z` | Whole vector: `mul` only. Component: `set` or `mul`. Every costume only. |
 
+### Computer players
+
+A clone's computer player reads its base's row of
+`fighter/common/ai/param/fighter_param.prc` (recovery reach, attack ranges,
+Final Smash range) unless you give it values:
+
+```rust
+// cpu_param(name) then .set(value), .mul(factor) or .int(value), like param
+WAWA.cpu_param("width").set(12.0);                      // a number field
+WAWA.cpu_param("jump_high").mul(1.2);                   // times the base's value
+WAWA.cpu_param("num_of_attack_123").int(2);             // a whole-number field
+WAWA.cpu_param("jump_sp_u_c0").int(0);                  // an on/off field: 0 or 1
+v2::cpu_param(kind, "range_long").set(45.0);            // by kind, for a fighter registered by fighter.toml
+```
+
+Each returns `false` when the kind is unknown or the field is not one the row
+can take. Or ship `fighter/<name>/ai/param/fighter_param.prcxml`: its first
+`base` row, whatever its index or `name_hash`. Code sets over the file.
+`final_type` is a label and stays the base's. Set values before the battle:
+one set during it waits for the next, unless the clone already had values
+when it began.
+
 ### Lists and arrays
 
 Neither syntax keys into a list. `vl.prc` lists (`hit_data`, `hit_target`,
@@ -740,6 +762,7 @@ let object = enemy::start(request);                               // on a later 
 | `enemy::drive_now(object)` | End what the game is doing with a driven enemy (a hit's reaction) and hand it to the driver at once. |
 | `enemy::class_status(object)` | Its class status (each base numbers its own); `None` for no enemy. |
 | `enemy::remove(object)` | Take it off the stage. |
+| `enemy::set_common(kind, field, value)` | One field of the clone's own row of `enemy/common/common.prc` (`hp`, `weight`, `egg_scale`, `capture_frame`, ...): `f32`, `i32`, `bool`, or `RowValue::Hash` for `capture_motion`. The rest stays the base's. Labels (`category`, `size_category`, ...) are refused. |
 | `enemy::set_vtable_entry(kind, slot, function)` | Replace one entry of the clone's 77-slot class vtable; the base's own enemies keep the game's. Set it before the battle; a null function gives the slot back. |
 | `enemy::original_entry(kind, slot)` | The entry it replaced, to call from your function; `None` until the first enemy of the clone is built. |
 | `enemy::set_object_vtable_entry(kind, slot, function)` | Replace one entry of the clone's copy of the enemy object's 163-slot vtable, otherwise one table for every enemy kind. |
@@ -757,7 +780,9 @@ as `slot::item`'s); the others by number, below `object_slot::COUNT`.
 
 Kinds: `YELLOW_DEVIL`, `DARK_EMPEROR`, `FLYING_MAN`, `METAL_FACE`, `NABBIT`. A
 Nabbit clone reads its own parameters from
-`enemy/<name>/model/body/c00/param.prc`.
+`enemy/<name>/model/body/c00/param.prc`. Its row of `enemy/common/common.prc`
+can come from `enemy/<name>/common.prcxml` (the first `enemy_param_table`
+row, whatever its index or `kind`); `set_common` sets over it.
 
 An `enemy.toml` beside `config.json` declares the clone without code:
 
@@ -779,9 +804,25 @@ base = "nabbit"     # yellow_devil, dark_emperor, flying_man, metal_face or nabb
 
 ## Stages
 
-`stage.toml` only; see [Stages](wiki/STAGES.md). A stage plugin holds code
-and registers nothing. The old calls are in
+`stage.toml` registers stages; see [Stages](wiki/STAGES.md). A stage plugin
+holds code and registers nothing. The old calls are in
 [DEPRECATED.md](DEPRECATED.md#stages).
+
+A cloned stage's rows, by its `place` name, from any plugin:
+
+```rust
+use dionysus_api::stage;
+
+stage::set_reverb("my_stage", 2).unwrap();                  // 0 to 10, see Stages
+stage::set_sound_scale("my_stage", 1.2).unwrap();
+stage::set_sound_offset("my_stage", -15.0).unwrap();
+stage::set_cpu_area("my_stage", -80.0, -5.0, 80.0, 40.0).unwrap(); // x0, y0, x1, y1: the Normal form's box
+stage::set_items_start("my_stage", true).unwrap();          // like items_start = "all"
+stage::set_item("my_stage", "heart", false).unwrap();       // like items_off; true like items_on
+```
+
+They set over `stage.toml` and the stage's prcxml files; the last call for an
+item wins.
 
 ## Menus
 
