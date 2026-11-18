@@ -135,11 +135,14 @@ pub(crate) fn fighter_vl(directory: &str, resource: &str, declared: &[ParamDecla
 }
 
 pub(crate) fn item_file(directory: &str, resource: &str) -> Option<PathBuf> {
-    let name = format!("{}.prcxml", prcxml::ITEM_FILE);
+    item_named_file(directory, resource, &format!("{}.prcxml", prcxml::ITEM_FILE))
+}
+
+pub(crate) fn item_named_file(directory: &str, resource: &str, name: &str) -> Option<PathBuf> {
     let inside = |root: &Path| {
         ["item", "assist", "pokemon", "boss"]
             .iter()
-            .map(|top| root.join(top).join(resource).join("param").join(&name))
+            .map(|top| root.join(top).join(resource).join("param").join(name))
             .find(|candidate| candidate.is_file())
     };
     inside(&Path::new(MOD_ROOT).join(directory)).or_else(|| enabled_folders().find_map(|folder| inside(&folder)))
@@ -218,4 +221,24 @@ pub(crate) fn stage_area(directory: &str, places: &[&str], tree: &str) -> Option
     }
     skyline::println!("[stagepack] {directory}: {name} {text}");
     found.area
+}
+
+#[cfg(feature = "css_slot")]
+pub(crate) fn asset_params(path: &Path, tag: &str, label: &str, space: crate::custom_params::Space, owner: u64) {
+    let Some(root) = read(path, tag, label) else {
+        return;
+    };
+    let name = file_name(path);
+    let found = prcxml::asset_params(&root);
+    if found.shared_row {
+        skyline::println!(
+            "[{tag}] {label}: {name} holds a params list, the shared item row, which common_param.prcxml sets; the file is not used"
+        );
+        return;
+    }
+    let set = found.values.len();
+    for (group, field, value) in found.values {
+        crate::custom_params::set_asset(space, owner, group, field, crate::custom_params::answer_of(value));
+    }
+    skyline::println!("[{tag}] {label}: {name} {}", summary(set, 0, &found.skipped, None));
 }

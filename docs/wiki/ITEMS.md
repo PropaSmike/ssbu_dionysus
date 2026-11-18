@@ -22,9 +22,12 @@ pub fn main() {
         "killsword", // the vanilla item it is built on, here the Killing Edge
     )
     .spawn_per(30)                    // natural drop weight; most vanilla items are 20 to 50
-    .spawn_from(&["box", "barrel"])   // containers that can hold it
-    .common("throw_speed_mul", 0.75); // a field of item/common/param/param.prc, for this item only
-    let Ok(kind) = WAWA.register(manifest) else { return };
+    .spawn_from(&["box", "barrel"]);  // containers that can hold it
+    if WAWA.register(manifest).is_err() {
+        return; // the fault is in the log
+    }
+
+    WAWA.common("throw_speed_mul").set(0.75); // a field of item/common/param/param.prc, for this item only
 
     WAWA.status(ItemStatusLine::Init, "THROW", throw_init); // status line, a status name of the base item, function
 }
@@ -55,7 +58,12 @@ A prcxml made for `item/common/param/param.prc` sets the same row from
 `item/wawa/param/common_param.prcxml` (`assist/` or `pokemon/` for those
 families; each member reads its own folder). The row index does not matter
 and `name` is ignored: the row is your item's. `[common]` and the plugin's
-`.common` win over it, and the boot log names anything left out.
+`.common` win over it, and the boot log names anything left out. In code,
+`WAWA.common("throw_speed_mul").mul(1.5)` sets one field after registering
+(`.set`, `.int`, `.label` or `.hash` too).
+
+Keys of your own, for your item's code, go in `item/wawa/param/param.prcxml`
+or `WAWA.param("key")` ([Params of your own](PARAMETERS.md#params-of-your-own)).
 
 Statuses are registered at startup, by name; they are the base item's and the
 lines are `Setting`, `JointSrt`, `Init`, `Update`, `Coroutine`, `Exit`.
@@ -117,12 +125,11 @@ members       = ["my_boss", "my_boss_missile", "my_boss_shockwave"]
 
 Some items (Steve's blocks, `pickelobject`) read their settings from a
 fighter's `vl.prc`. `owner_param` gives your item its own values, by fighter
-and field name, without touching the fighter:
+and field name, without touching the fighter. After registering:
 
 ```rust
-ItemManifest::new("wawa_block", "pickelobject")
-    .owner_param("pickel", "life", 600.0)       // owner fighter (Steve), a field of its vl.prc, value
-    .owner_param("pickel", "auto_damage", 0.0)
+WAWA_BLOCK.owner_param("pickel", "life").int(600);        // owner fighter (Steve), a field of its vl.prc
+WAWA_BLOCK.owner_param("pickel", "auto_damage").set(0.0);
 ```
 
 ```toml
@@ -135,7 +142,7 @@ Set every field that decides the same outcome: a block ends on `life` or
 `auto_damage`, whichever comes first.
 
 [custom_items/template_v2](../../custom_items/template_v2/) does exactly
-this in code with `owner_param("pickel", "life").set(600.0)`.
+this in code.
 
 ## File layout
 

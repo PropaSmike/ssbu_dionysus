@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use dionysus_core::prcxml::{self, Value, Why};
-use dionysus_core::row_fields::{self, enemy, RowValue};
+use dionysus_core::row_fields::{self, enemy, RowField, RowValue};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -10,8 +10,14 @@ const PARAMS_ROWS: usize = 0xa8;
 const SITES: usize = 17;
 const BUFFER_WORDS: usize = enemy::ROW_SIZE * 2 / 8;
 
+#[derive(Clone, Copy)]
+enum Change {
+    Set(RowValue),
+    Mul(&'static RowField, f32),
+}
+
 struct Own {
-    values: Vec<(usize, RowValue)>,
+    values: Vec<(usize, Change)>,
     buffer: Box<[u64; BUFFER_WORDS]>,
     slot: usize,
     rows: usize,
@@ -33,7 +39,7 @@ fn has_own(kind: u32) -> bool {
     kind < 32 && OWN_MASK.load(Ordering::Acquire) & (1 << kind) != 0
 }
 
-fn store(kind: u32, offset: usize, value: RowValue) {
+fn store(kind: u32, offset: usize, value: Change) {
     if let Ok(mut own) = OWN.lock() {
         let own = own.get_or_insert_with(HashMap::new).entry(kind).or_insert_with(|| Own {
             values: Vec::new(),
@@ -50,11 +56,25 @@ fn store(kind: u32, offset: usize, value: RowValue) {
 
 pub(crate) fn set(kind: u32, field: u64, value: &Value) -> Result<(), Why> {
     let (offset, converted) = row_fields::set(&enemy::FIELDS, field, value)?;
-    store(kind, offset, converted);
+    store(kind, offset, Change::Set(converted));
+    Ok(())
+}
+
+pub(crate) fn mul(kind: u32, hash: u64, factor: f32) -> Result<(), Why> {
+    let field = row_fields::find(&enemy::FIELDS, hash).ok_or(Why::Unknown)?;
+    if row_fields::multiplied(field, &[0; enemy::ROW_SIZE], factor).is_none() {
+        return Err(Why::Type);
+    }
+    store(kind, field.offset, Change::Mul(field, factor));
     Ok(())
 }
 
 pub(crate) fn load_file(kind: u32, name: &str) {
+    #[cfg(feature = "css_slot")]
+    if let Some(path) = crate::param_files::find_in_mods(&["enemy", name, "param", "param.prcxml"]) {
+        let label = crate::param_files::file_name(path.ancestors().nth(4).unwrap_or(&path));
+        crate::param_files::asset_params(&path, "enemyclone", &label, crate::custom_params::Space::Enemy, u64::from(kind));
+    }
     let file = format!("{}.prcxml", prcxml::ENEMY_FILE);
     let Some(path) = crate::param_files::find_in_mods(&["enemy", name, &file]) else {
         return;
@@ -66,7 +86,7 @@ pub(crate) fn load_file(kind: u32, name: &str) {
     let found = row_fields::changes(&enemy::FIELDS, &prcxml::enemy_row(&root));
     let set = found.values.len();
     for (offset, value) in found.values {
-        store(kind, offset, value);
+        store(kind, offset, Change::Set(value));
     }
     skyline::println!(
         "[enemyclone] {name}: {file} {}",
@@ -106,10 +126,17 @@ unsafe fn own_index(kind: u32, base_index: i64) -> Option<i64> {
     let slot = buffer + gap;
     if own.rows != rows || own.slot != slot {
         let source = rows + base_index as usize * enemy::ROW_SIZE;
+        let base = core::slice::from_raw_parts(source as *const u8, enemy::ROW_SIZE);
         let row = core::slice::from_raw_parts_mut(slot as *mut u8, enemy::ROW_SIZE);
-        row.copy_from_slice(core::slice::from_raw_parts(source as *const u8, enemy::ROW_SIZE));
-        for (offset, value) in &own.values {
-            value.write(row, *offset);
+        row.copy_from_slice(base);
+        for (offset, change) in &own.values {
+            let value = match *change {
+                Change::Set(value) => Some(value),
+                Change::Mul(field, factor) => row_fields::multiplied(field, base, factor),
+            };
+            if let Some(value) = value {
+                value.write(row, *offset);
+            }
         }
         own.rows = rows;
         own.slot = slot;
@@ -182,10 +209,15 @@ pub extern "C" fn clone_engine_enemy_common_set(kind: u32, field: u64, tag: u32,
     if crate::enemy_clones::base_of(kind).is_none() {
         return -1;
     }
-    let Some(value) = row_fields::value_from_tag(tag, bits) else {
-        return -3;
+    let result = if tag == row_fields::TAG_MUL {
+        mul(kind, field, f32::from_bits(bits as u32))
+    } else {
+        let Some(value) = row_fields::value_from_tag(tag, bits) else {
+            return -3;
+        };
+        set(kind, field, &value)
     };
-    match set(kind, field, &value) {
+    match result {
         Ok(()) => 0,
         Err(Why::Unknown) => -2,
         Err(_) => -3,

@@ -76,6 +76,7 @@ struct OwnArea {
 
 static SOUNDS: Mutex<Option<HashMap<u64, StageSound>>> = Mutex::new(None);
 static AREAS: Mutex<Option<HashMap<u64, OwnArea>>> = Mutex::new(None);
+static EDGES: Mutex<Option<HashMap<u64, [Option<f32>; 4]>>> = Mutex::new(None);
 static PLACES: Mutex<Option<HashMap<u32, Option<(u64, bool)>>>> = Mutex::new(None);
 static LOGGED: Mutex<Vec<(u32, u8)>> = Mutex::new(Vec::new());
 static REVERB_READY: AtomicBool = AtomicBool::new(false);
@@ -118,6 +119,30 @@ pub(crate) fn set_sound(place: u64, sound: StageSound) {
 }
 
 pub(crate) fn set_area(place: u64, area: Area) {
+    set_edges(place, [Some(area.x0), Some(area.y0), Some(area.x1), Some(area.y1)]);
+}
+
+fn set_edges(place: u64, edges: [Option<f32>; 4]) -> bool {
+    let known = {
+        let Ok(mut known) = EDGES.lock() else {
+            return false;
+        };
+        let known = known.get_or_insert_with(HashMap::new).entry(place).or_default();
+        for (held, edge) in known.iter_mut().zip(edges) {
+            if edge.is_some() {
+                *held = edge;
+            }
+        }
+        *known
+    };
+    let [Some(x0), Some(y0), Some(x1), Some(y1)] = known else {
+        return false;
+    };
+    install_area(place, Area { x0, y0, x1, y1 });
+    true
+}
+
+fn install_area(place: u64, area: Area) {
     let entry = Box::new(AreaEntry {
         key: AtomicU64::new(0),
         x0: area.x0,
@@ -348,9 +373,9 @@ pub extern "C" fn clone_engine_stage_sound_set(place: u64, reverb: i32, scale: f
 
 #[no_mangle]
 pub extern "C" fn clone_engine_stage_area_set(place: u64, x0: f32, y0: f32, x1: f32, y1: f32) -> i32 {
-    if [x0, y0, x1, y1].iter().any(|edge| edge.is_nan()) {
+    let edges = [x0, y0, x1, y1].map(|edge| (!edge.is_nan()).then_some(edge));
+    if edges.iter().all(Option::is_none) {
         return -2;
     }
-    set_area(place, Area { x0, y0, x1, y1 });
-    0
+    i32::from(!set_edges(place, edges))
 }

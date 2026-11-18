@@ -94,6 +94,20 @@ param_override_full(kind, ANY_SLOT, "param_motion", "escape_air_slide_speed", Pa
 param_override_full(kind, ANY_SLOT, "common", "shield_max", ParamOp::Set, 20.0);
 ```
 
+## Manifest params
+
+They still work: each writes a line of the `fighter.toml` or `item.toml` text
+the manifest builds. Replacement: the same value as a param call after
+`register` ([API](API.md#parameters)).
+
+| Manifest method | Param call after `register` |
+|---|---|
+| `param(name, v)`, `param_int(name, v)`, `param_mul(name, v)` | `WAWA.param(name).set(v)`, `.int(v)`, `.mul(v)` |
+| `params(&[..])`, `params_int(&[..])`, `params_mul(&[..])` | One call per value. |
+| `param_at(costume, name, v)`, `param_int_at`, `param_mul_at` | `WAWA.param(name).slot(costume).set(v)`, `.int(v)`, `.mul(v)` |
+| `common(field, v)`, `common_int(field, v)` | `ITEM.common(field).set(v)`, `.int(v)` |
+| `owner_param(fighter, field, v)`, `owner_param_int` | `ITEM.owner_param(fighter, field).set(v)`, `.int(v)` |
+
 ## Articles
 
 Replacement: `Manifest::article`, `NAME.article("x")`.
@@ -177,8 +191,9 @@ ItemModule::have_item(boma, smash::app::ItemKind(MY_ITEM.raw()), 0, 0, false, fa
 | `item_status_named(kind, line, name, function)` | Status callback by name, at startup. |
 | `item_status(kind, line, status, function)` | Same with a number; 0 refused. |
 | `item_status_kind(name)` | Resolve a status name. Fails until the item module's table exists. |
-| `item_common_set(kind, hash, value)`, `item_common_set_i32(kind, hash, value)` | A common-file float or int, for this item only. |
-| `item_owner_param_set_f32(kind, owner_kind, offset, value)`, `item_owner_param_set_i32` | A word of the owner fighter's `vl.prc` by byte offset (multiple of 4, below `0x4000`), for this item only. |
+| `item_common_set(kind, hash, value)`, `item_common_set_i32(kind, hash, value)` | A common-file float or int, for this item only. Now `v2::item_common(kind, "field").set(v)` or `.int(v)`. |
+| `item_common_set_label(kind, hash, label)`, `item_common_set_hash(kind, hash, name)` | A kind field by label, a bone or motion name field. Now `.label("...")` and `.hash("...")` on `v2::item_common`. |
+| `item_owner_param_set_f32(kind, owner_kind, offset, value)`, `item_owner_param_set_i32` | A word of the owner fighter's `vl.prc` by byte offset (multiple of 4, below `0x4000`), for this item only. Now `v2::item_owner_param(kind, "fighter", "field").set(v)`. |
 | `item_generate_add(kind, generator, per, min, max, variation)` | Natural or container drops. `generator`: `hash40("item_genid_random")` or `hash40("item_kind_<container>")`; `variation`: `ITEM_VARIATION_AUTO`. |
 
 ```rust

@@ -79,10 +79,7 @@ pub fn main() {
         "pickelobject",  // the vanilla item it is built on, here Steve's block
     )
     .training_order(0)                     // position in the Training menu's item list
-    .spawn_per(30)                         // natural drop weight; leave out for no natural drops
-    .common("throw_speed_mul", 0.75)       // a float field of item/common/param/param.prc
-    .owner_param_int("pickel", "life", 600)   // owner fighter (Steve), an integer field of its vl.prc, value
-    .owner_param("pickel", "auto_damage", 0.0); // a float field; set every field that decides the same outcome
+    .spawn_per(30);                        // natural drop weight; leave out for no natural drops
     let kind = match TEMPLATE_ITEM.register(manifest) {
         Ok(kind) => kind,
         Err(error) => {
@@ -90,6 +87,14 @@ pub fn main() {
             return;
         }
     };
+
+    // values: name one, then .set, .mul or .int (.label, .hash for a name field)
+    let applied = TEMPLATE_ITEM.common("throw_speed_mul").set(0.75); // a field of item/common/param/param.prc
+    let applied = applied & TEMPLATE_ITEM.owner_param("pickel", "life").int(600); // owner fighter (Steve), a field of its vl.prc
+    let applied = applied & TEMPLATE_ITEM.owner_param("pickel", "auto_damage").set(0.0); // set every field that decides the same outcome
+    if !applied {
+        skyline::println!("[template_item_v2] a param was refused; the log says which");
+    }
 
     // status line, a status name of the base item, function; at startup, by name
     TEMPLATE_ITEM.status(ItemStatusLine::Init, "THROW", throw_init);

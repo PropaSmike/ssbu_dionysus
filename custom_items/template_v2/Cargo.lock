@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "compile-time-lua-bind-hash"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "660bcccd4aaa4836cb685952d9ea4fb2b57d2565f4fd0c492fce4d2c0a1be0c0"
+dependencies = [
+ "lua_bind_hash",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "dionysus_api"
 version = "0.7.0-beta.1"
 dependencies = [
@@ -32,17 +43,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "compile-time-lua-bind-hash"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "660bcccd4aaa4836cb685952d9ea4fb2b57d2565f4fd0c492fce4d2c0a1be0c0"
-dependencies = [
- "lua_bind_hash",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

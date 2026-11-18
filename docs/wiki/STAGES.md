@@ -96,9 +96,14 @@ The row index, `place_id_` and `stage_name` do not matter. `reverb_type_` is
 one of 11 presets: 0 none, 1 outdoors, 2 to 4 small, medium and large rooms,
 10 Hanenbow's delay. A sound field you leave out keeps the donor's value.
 
-A plugin can set the same rows and the item keys by `place`:
-`dionysus_api::stage::set_reverb`, `set_sound_scale`, `set_sound_offset`,
-`set_cpu_area`, `set_items_start` and `set_item` ([API](../API.md#stages)).
+A plugin can set the same rows by `place`, with the files' field names:
+`stage::sound(place, "reverb_type_").int(2)`,
+`stage::cpu_area(place, "x0").set(-80.0)`; and the item keys with
+`set_items_start` and `set_item` ([API](../API.md#stages)).
+
+Keys of your own go in `stage/<place>/normal/param/param.prcxml`; a plugin
+reads them for the stage being played with `stage::param_float("key")`
+([Params of your own](PARAMETERS.md#params-of-your-own)).
 
 Stage-select icons (`stage_<N>_<id_name>.bntx`, `id_name` lowercased) go
 under `ui/replace/stage/stage_<N>/` or, as the patch-era stages' do,

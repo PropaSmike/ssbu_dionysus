@@ -44,18 +44,14 @@ pub fn main() {
     let Ok(kind) = WAWA.register(manifest) else {
         return; // the fault is in the log
     };
+    skyline::println!("[wawa] registered as fighter kind {kind}");
 
     publish_css();
 
-    let slots: Vec<i32> = (0..COSTUMES as i32).collect(); // costumes the values apply to; vec![-1] is all of them
-    param_config::update_float(
-        kind,                                              // the clone's kind, from register
-        slots.clone(),                                     // costumes
-        (hash40("param_special_hi"), hash40("y_spd_air")), // (param table, field)
-        1.5,                                               // new value
-    );
-    param_config::update_int(kind, slots.clone(), (hash40("jump_squat_frame"), 0), 4); // top-level field: second hash is 0
-    WAWA.param("weight").mul(1.02); // fighter_param attribute: through the engine, see Parameters
+    // values: name one ("group.field" inside a group), then .set, .mul or .int; see Parameters
+    WAWA.param("param_special_hi.y_spd_air").set(1.5); // a vl.prc value, pushed to ParamConfig
+    WAWA.param("jump_squat_frame").int(4);             // a fighter_param attribute, through the engine
+    WAWA.param("weight").mul(1.02);                    // times the base's value
 
     Agent::new("wawa")                                              // scripts under the clone's own name
         .game_acmd("game_attack11", game_attack11, Priority::Default) // script name, your function, priority
@@ -80,7 +76,9 @@ unsafe fn on_link_event(class: u64, object: *mut smash::app::BattleObject, event
 ```
 
 `register` goes first; everything else needs the kind. It returns the kind
-or `Error::Engine(ERROR_MANIFEST)`; the log names the fault.
+or `Error::Engine(ERROR_MANIFEST)`; the log names the fault. Values are param
+calls after it ([Parameters](#parameters)); the manifest's own `param` methods
+are in [DEPRECATED.md](DEPRECATED.md#manifest-params).
 
 | `Manifest` method | Meaning |
 |---|---|
@@ -108,9 +106,6 @@ or `Error::Engine(ERROR_MANIFEST)`; the log names the fault.
 | `tether(donor)` | Turn the air tether on and take that fighter's tether timings and ledge boxes: `"samus"`, `"samusd"`, `"szerosuit"`, `"younglink"`, `"toonlink"`, `"lucas"` or `"luigi"`. See [Tethers](wiki/FIGHTERS.md#tethers). |
 | `tether_box([x, y], [x, y])` | One ledge box of your own, two corners relative to the fighter. Replaces the donor's boxes. |
 | `move_list(pages)`, `move_list_images(&[..])` | Extra move list pages, up to 32, and the ones that show a picture, counted from 0. See [Move list pages](wiki/FIGHTERS.md#move-list-pages). |
-| `param(name, v)`, `param_int(name, v)`, `param_mul(name, v)` | One stat. `"a.b"` reaches a sub value. |
-| `params(&[..])`, `params_int(&[..])`, `params_mul(&[..])` | Several at once. |
-| `param_at(costume, name, v)`, `param_int_at`, `param_mul_at` | One costume only. |
 | `raw(toml)` | Append any table the builder lacks. |
 | `to_toml()` | The text the engine receives. |
 
@@ -250,7 +245,7 @@ Several fighters in one file: `[[fighter]]` blocks, with `[[fighter.article]]`,
 | `hud(x, Hud::...)` | Change the borrowed HUD: `Gauge(v)`, `State(on)`, `Select(i)`, `Slot(i, v)`, `MenuOpen([MenuCommand; 4])`, `MenuCursor(row)`, `MenuDecide(row)`, `MenuClose`. False when that HUD has no such call. See [Borrowed HUDs](wiki/FIGHTERS.md#borrowed-huds). Change your own layout: `Play(animation)`, `Frame(animation, frame)`, `Show(part, on)`, `Text(part, text)`. False when the layout on screen has no such part. See [Your own HUD](wiki/FIGHTERS.md#your-own-hud). |
 | `article("name")` | `.status(line, status, f)`, `.install()`, `.weapon_kind()`, `.index()`, `.spawn(boma)`, `.set_vtable_entry(n, f)`, `.set_common_vtable_entry(n, f)`. Read `index()` right before use; never fall back to 0. `.status` installs through Smashline on `<fighter>_<article>`; new code writes statuses with `smashline::Agent` there. |
 | `copy_article("name")` | Same, for a `kirby_article`. |
-| `param("name")` | `.sub("field")`, `.slot(n)`, then `.set(v)`, `.mul(v)` or `.int(v)`. |
+| `param("name")`, `param("group.field")` | `.slot(n)`, then `.set(v)`, `.mul(v)` or `.int(v)` ([Parameters](#parameters)). |
 | `kirby_family()`, `kirby_status(n)`, `arm_kirby()` | The reserved statuses. Arm after the `Agent::new("kirby")` statuses are installed. |
 | `own_status(n)` | Status number `n` of your fighter's own, counted from 0 past the base's statuses. Call after `register`; -1 before. |
 | `set_vtable_entry(n, f)` | Write one vtable entry; returns the previous. |
@@ -472,7 +467,24 @@ form when you want `call_original!`.
 
 ## Parameters
 
-Two syntaxes, by where the game reads the value.
+Every param call has one shape: name the value, then `.set(v)`, `.mul(factor)`
+or `.int(v)`, and `.label("...")` or `.hash("...")` for a field that holds a
+name. `"group.field"` reaches a field inside a group (`.sub("field")` does the
+same). Each returns `false` when the value is refused.
+
+| Call | Sets |
+|---|---|
+| `WAWA.param("name")` | a fighter's values, below |
+| `WAWA.cpu_param("name")`, `v2::cpu_param(kind, "name")` | its computer player's row ([below](#computer-players)) |
+| `ITEM.param("key")`, `v2::item_param(kind, "key")` | an item's params of its own |
+| `ITEM.common("field")`, `v2::item_common(kind, "field")` | its row of `item/common/param/param.prc` ([Items](#item)) |
+| `ITEM.owner_param("fighter", "field")`, `v2::item_owner_param(kind, "fighter", "field")` | its owner fighter's `vl.prc` values, for this item only |
+| `enemy::param(kind, "key")`, `enemy::common(kind, "field")` | an enemy's params of its own, its row of `enemy/common/common.prc` ([Enemies](#enemies)) |
+| `stage::param(place, "key")`, `stage::sound(place, "field")`, `stage::cpu_area(place, "edge")` | a stage's params of its own, its sound row, its computer player box ([Stages](#stages)) |
+
+`.mul` scales the base's value; stages have none to scale.
+
+A fighter's values take two syntaxes, by where the game reads them.
 
 | Values | Syntax |
 |---|---|
@@ -543,16 +555,16 @@ writes the clone's row, copies and results, and pushes `set` values to
 ParamConfig too, so one call covers every read.
 
 ```rust
-// param(name) then .sub(field) for a nested value, .slot(n) for one costume,
+// param(name) or param("group.field"), .slot(n) for one costume,
 // then .set(value), .mul(factor) or .int(value)
-WAWA.param("walk_speed_max").set(1.2);                              // fighter_param.prc field: (name), no sub
-WAWA.param("scale").set(1.1);                                       // read once at construction, engine only
-WAWA.param("param_motion").sub("escape_air_slide_distance").set(60.0); // fighter_param_motion.prc: ("param_motion", field)
-WAWA.param("param_motion").sub("flip").int(0);                      // an integer field
-WAWA.param("common").sub("shield_max").set(20.0);                   // any of the six common files: ("common", field)
-WAWA.param("common").sub("shield_reset").set(7.5);                  // set with shield_max, the game does not clamp it
-WAWA.param("param_thrown").sub("offset_f_y").set(8.0);              // where a fighter this clone throws sits: forward throw, Y
-WAWA.param("param_thrown").sub("held_offset").mul(1.2);             // where the clone sits when thrown: whole vector, mul only
+WAWA.param("walk_speed_max").set(1.2);                         // fighter_param.prc field: no group
+WAWA.param("scale").set(1.1);                                  // read once at construction, engine only
+WAWA.param("param_motion.escape_air_slide_distance").set(60.0); // fighter_param_motion.prc field
+WAWA.param("param_motion.flip").int(0);                        // an integer field
+WAWA.param("common.shield_max").set(20.0);                     // any of the six common files
+WAWA.param("common.shield_reset").set(7.5);                    // set with shield_max, the game does not clamp it
+WAWA.param("param_thrown.offset_f_y").set(8.0);                // where a fighter this clone throws sits: forward throw, Y
+WAWA.param("param_thrown.held_offset").mul(1.2);               // where the clone sits when thrown: whole vector, mul only
 ```
 
 ```toml
@@ -568,9 +580,9 @@ param_thrown.held_offset = 1.2
 param_special_hi.y_spd_air = 2.0      # costume 3 only; a vl.prc value, pushed to ParamConfig
 ```
 
-| Param | Sub | Notes |
+| Group | Field | Notes |
 |---|---|---|
-| a `fighter_param.prc` field | none | Every costume only. |
+| none: a `fighter_param.prc` field | the field | Every costume only. |
 | `param_motion` | a `fighter_param_motion.prc` field | |
 | `common` | a top-level field of `common.prc`, `item.prc`, `etc.prc`, `power_up.prc`, `effect.prc`, `sound.prc` | Lists inside them and the ~40 match-level fields (handicap, team attack, finish camera, area wind, `power_up_point_min`) stay global. |
 | `param_thrown` | holder: `offset`, `offset_f`, `offset_b`, `offset_hi`, `offset_lw`; victim: `held_offset`; each also `_x`, `_y`, `_z` | Whole vector: `mul` only. Component: `set` or `mul`. Every costume only. |
@@ -624,12 +636,12 @@ pub fn main() {
         "wawa",         // resource name: files under item/wawa, script name
         "pickelobject", // the vanilla item it is built on, here Steve's block
     )
-    .spawn_per(30)                         // natural drop weight
-    .common("throw_speed_mul", 0.75)       // a field of item/common/param/param.prc, value
-    .owner_param("pickel", "life", 600.0); // owner fighter (Steve), a field of its vl.prc, value
+    .spawn_per(30); // natural drop weight
     if WAWA.register(manifest).is_err() {
         return; // the fault is in the log
     }
+    WAWA.common("throw_speed_mul").set(0.75);    // a field of item/common/param/param.prc
+    WAWA.owner_param("pickel", "life").int(600); // owner fighter (Steve), a field of its vl.prc
     WAWA.status(ItemStatusLine::Init, "THROW", throw_init); // status line, status name of the base item, your function
 }
 ```
@@ -645,11 +657,11 @@ pub fn main() {
 | `spawn_per(weight)` | Natural drops. Vanilla items sit at 20..50, capsules at 100. Follows the base item's item switch. |
 | `spawn_range(min, max)` | How many appear at once. Default 1, 1. |
 | `spawn_from(&["box", "barrel"])` | Container drops: `box`, `barrel`, `capsule`, `carrierbox`, `kusudama`, `sandbag`, `grass`. |
-| `common(field, v)`, `common_int(field, v)` | A field of `item/common/param/param.prc`, for this item only. |
-| `owner_param(fighter, field, v)`, `owner_param_int` | A field of that fighter's `vl.prc`, for this item only. |
 | `raw(toml)`, `to_toml()` | As for `Manifest`. |
 
-`v2::register_item_manifest(label, text)` registers that text directly.
+`v2::register_item_manifest(label, text)` registers that text directly. Values are
+param calls after `register` ([Parameters](#parameters)); the manifest's own
+`common` and `owner_param` methods are in [DEPRECATED.md](DEPRECATED.md#manifest-params).
 
 ### `item.toml`
 
@@ -682,9 +694,11 @@ an integer. Several items: `[[item]]` blocks (engines after `0.2.1-beta.1`).
 |---|---|
 | `kind()`, `ready()`, `is(x)` | As for `Fighter`. |
 | `status(line, "NAME", f)` | Status callback by name, registered at startup. Lines: `Setting`, `JointSrt`, `Init`, `Update`, `Coroutine`, `Exit`. Statuses are the base item's; an unknown name is refused. |
-| `owner_param("fighter", "field").set(v)` | As the manifest method. |
+| `owner_param("fighter", "field")` | A field of that fighter's `vl.prc`, for this item only: `.set(v)`, `.int(v)` or `.mul(factor)`. `v2::item_owner_param(kind, "fighter", "field")` by kind. |
+| `common("field")` | One field of its row of `item/common/param/param.prc`: `.set(v)`, `.int(v)` or `.mul(factor)` for a number, `.label("item_shield_kind_lost")` for a kind field, `.hash("top")` for a bone or motion name. `v2::item_common(kind, "field")` by kind. |
 | `vtable_entry(n)`, `set_vtable_entry(n, f)` | The item's own vtable copy. |
 | `set_common_vtable_entry(n, f)` | Its own agent vtable copy, slots 0 to 9. See [Common vtables](#common-vtables). |
+| `param("key")` | A key of the item's own params (`"group.key"` for a group): `.set(v)`, `.mul(factor)`, `.int(v)`. `v2::item_param(kind, "key")` by kind. Read with `app::item::self_param_float`. See [Params of your own](wiki/PARAMETERS.md#params-of-your-own). |
 | `register(manifest)` | Above. |
 
 Spawning from code:
@@ -709,14 +723,13 @@ ItemModule::have_item(
 | `item_kind_from_object(object)`, `item_kind_from_boma(boma)` | Kind of a live item. Unsafe. |
 | `item_kind_held(boma, index)`, `item_kind_pickable(boma)` | What a fighter holds or could pick up. Unsafe. |
 | `item_common_has(hash)` | Whether a common field is supported. |
-| `item_common_set_label(kind, hash, label)` | A kind field of the common file by label, such as `hash40("shield_kind")` to `hash40("item_shield_kind_lost")`. |
-| `item_common_set_hash(kind, hash, name)` | A bone or motion name field, such as `thrown_node`. |
 | `item_backend_status()` | `ITEM_BACKEND_STATUS_*` readiness bits. |
 
 Common fields: `have_kind`, `size_kind`, `hit_kind`, `shield_kind`,
 `reflect_kind`, `flip_type`, `bound_flag`, `scale_type`, `camera_kind`,
 `eatable`, `paintable`, `ai_pri`, `thrown_rot_kind`, `thrown_node`,
-`clung_node`, `captured_motion`, ... `group` cannot be set.
+`clung_node`, `captured_motion`, ... `group` cannot be set. The older
+`item_common_set*` calls are in [DEPRECATED.md](DEPRECATED.md#items).
 
 `members = [...]` in `item.toml`, or `ItemManifest::members`, registers a
 family with no other code. Item families (`register_item_family`,
@@ -762,7 +775,8 @@ let object = enemy::start(request);                               // on a later 
 | `enemy::drive_now(object)` | End what the game is doing with a driven enemy (a hit's reaction) and hand it to the driver at once. |
 | `enemy::class_status(object)` | Its class status (each base numbers its own); `None` for no enemy. |
 | `enemy::remove(object)` | Take it off the stage. |
-| `enemy::set_common(kind, field, value)` | One field of the clone's own row of `enemy/common/common.prc` (`hp`, `weight`, `egg_scale`, `capture_frame`, ...): `f32`, `i32`, `bool`, or `RowValue::Hash` for `capture_motion`. The rest stays the base's. Labels (`category`, `size_category`, ...) are refused. |
+| `enemy::common(kind, "field")` | One field of the clone's own row of `enemy/common/common.prc` (`hp`, `weight`, `egg_scale`, `capture_frame`, ...): `.set(v)`, `.int(v)` or `.mul(factor)`, `.hash("damagestart")` for `capture_motion`. The rest stays the base's. Labels (`category`, `size_category`, ...) are refused. |
+| `enemy::param(kind, "key")` | A key of the clone's own params (`"group.key"` for a group): `.set(v)`, `.mul(factor)`, `.int(v)`. Read with `WorkModule::get_param_float(boma, hash40("param"), hash40("key"))`; `enemy/<name>/param/param.prcxml` sets the same. |
 | `enemy::set_vtable_entry(kind, slot, function)` | Replace one entry of the clone's 77-slot class vtable; the base's own enemies keep the game's. Set it before the battle; a null function gives the slot back. |
 | `enemy::original_entry(kind, slot)` | The entry it replaced, to call from your function; `None` until the first enemy of the clone is built. |
 | `enemy::set_object_vtable_entry(kind, slot, function)` | Replace one entry of the clone's copy of the enemy object's 163-slot vtable, otherwise one table for every enemy kind. |
@@ -782,7 +796,7 @@ Kinds: `YELLOW_DEVIL`, `DARK_EMPEROR`, `FLYING_MAN`, `METAL_FACE`, `NABBIT`. A
 Nabbit clone reads its own parameters from
 `enemy/<name>/model/body/c00/param.prc`. Its row of `enemy/common/common.prc`
 can come from `enemy/<name>/common.prcxml` (the first `enemy_param_table`
-row, whatever its index or `kind`); `set_common` sets over it.
+row, whatever its index or `kind`); `enemy::common` sets over it.
 
 An `enemy.toml` beside `config.json` declares the clone without code:
 
@@ -808,21 +822,27 @@ base = "nabbit"     # yellow_devil, dark_emperor, flying_man, metal_face or nabb
 holds code and registers nothing. The old calls are in
 [DEPRECATED.md](DEPRECATED.md#stages).
 
-A cloned stage's rows, by its `place` name, from any plugin:
+A cloned stage's rows, by its `place` name, from any plugin. The field names
+are the prcxml files' (a trailing `_` is optional):
 
 ```rust
 use dionysus_api::stage;
 
-stage::set_reverb("my_stage", 2).unwrap();                  // 0 to 10, see Stages
-stage::set_sound_scale("my_stage", 1.2).unwrap();
-stage::set_sound_offset("my_stage", -15.0).unwrap();
-stage::set_cpu_area("my_stage", -80.0, -5.0, 80.0, 40.0).unwrap(); // x0, y0, x1, y1: the Normal form's box
+stage::sound("my_stage", "reverb_type_").int(2);            // 0 to 10, see Stages
+stage::sound("my_stage", "scale_").set(1.2);
+stage::sound("my_stage", "offset_").set(-15.0);
+stage::cpu_area("my_stage", "x0").set(-80.0);               // the Normal form's box: x0, y0, x1, y1,
+stage::cpu_area("my_stage", "y0").set(-5.0);                // used once all four are known
+stage::cpu_area("my_stage", "x1").set(80.0);
+stage::cpu_area("my_stage", "y1").set(40.0);
+stage::param("my_stage", "wind").set(0.5);                  // a key of its own: .set or .int
+let wind = stage::param_float("wind");                      // the stage being played: Some(0.5), None if unset
 stage::set_items_start("my_stage", true).unwrap();          // like items_start = "all"
 stage::set_item("my_stage", "heart", false).unwrap();       // like items_off; true like items_on
 ```
 
 They set over `stage.toml` and the stage's prcxml files; the last call for an
-item wins.
+item wins. The item calls switch items on and off; they are not params.
 
 ## Menus
 

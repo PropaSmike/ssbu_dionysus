@@ -482,6 +482,41 @@ pub fn vl_params(root: &Node) -> FighterParams {
     out
 }
 
+pub const ASSET_FILE: &str = "param";
+pub const ASSET_GROUP: &str = "param";
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AssetParams {
+    pub values: Vec<(u64, u64, ParamValue)>,
+    pub skipped: Vec<Skipped>,
+    pub shared_row: bool,
+}
+
+pub fn asset_params(root: &Node) -> AssetParams {
+    let mut out = AssetParams {
+        shared_row: !rows(root, "params").is_empty(),
+        ..Default::default()
+    };
+    if out.shared_row {
+        return out;
+    }
+    let found = vl_params(root);
+    out.skipped = found.skipped;
+    for (name, value) in found.params {
+        let (group, field) = param_key(&name);
+        let (group, field) = if field == 0 { (hash40(ASSET_GROUP), group) } else { (group, field) };
+        out.values.push((group, field, value));
+    }
+    out
+}
+
+pub fn asset_key(name: &str) -> (u64, u64) {
+    match name.split_once('.') {
+        Some((group, field)) => (key(group), key(field)),
+        None => (hash40(ASSET_GROUP), key(name)),
+    }
+}
+
 pub fn param_key(name: &str) -> (u64, u64) {
     match name.split_once('.') {
         Some((group, field)) => (key(group), key(field)),
@@ -911,6 +946,27 @@ mod tests {
             out.params,
             vec![(format!("{:#x}.{:#x}", hash40("param_fireball"), hash40("speed")), ParamValue::Float(0.4))]
         );
+    }
+
+    #[test]
+    fn an_asset_file_puts_top_level_values_under_param() {
+        let root = parse(
+            "<struct><float hash=\"have_scale\">2.5</float><struct hash=\"my_group\"><int hash=\"count\">3</int></struct></struct>",
+        )
+        .unwrap();
+        let out = asset_params(&root);
+        assert_eq!(
+            out.values,
+            vec![
+                (hash40("param"), hash40("have_scale"), ParamValue::Float(2.5)),
+                (hash40("my_group"), hash40("count"), ParamValue::Int(3)),
+            ]
+        );
+        assert!(!out.shared_row);
+        let shared = parse("<struct><list hash=\"params\"><struct index=\"0\"><float hash=\"a\">1</float></struct></list></struct>").unwrap();
+        assert!(asset_params(&shared).shared_row);
+        assert_eq!(asset_key("have_scale"), (hash40("param"), hash40("have_scale")));
+        assert_eq!(asset_key("my_group.count"), (hash40("my_group"), hash40("count")));
     }
 
     #[test]

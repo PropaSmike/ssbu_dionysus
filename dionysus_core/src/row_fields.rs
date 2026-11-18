@@ -30,6 +30,14 @@ pub const TAG_I32: u32 = 1;
 pub const TAG_BOOL: u32 = 2;
 pub const TAG_HASH: u32 = 3;
 pub const TAG_MUL: u32 = 4;
+pub const TAG_LABEL: u32 = 5;
+
+pub fn scaled_word(bits: u32, float: bool, factor: f32) -> u32 {
+    if float {
+        return (f32::from_bits(bits) * factor).to_bits();
+    }
+    (bits as i32 as f32 * factor).round() as i32 as u32
+}
 
 pub fn multiplied(field: &RowField, base: &[u8], factor: f32) -> Option<RowValue> {
     let cells = base.get(field.offset..field.offset + 4)?;
@@ -144,6 +152,14 @@ pub fn changes(fields: &'static [RowField], row: &ItemRow) -> RowChanges {
 mod tests {
     use super::*;
     use crate::hash::hash40;
+
+    #[test]
+    fn a_word_scales_as_a_float_or_a_rounded_integer() {
+        assert_eq!(f32::from_bits(scaled_word(2.5f32.to_bits(), true, 1.5)), 3.75);
+        assert_eq!(scaled_word(600, false, 1.5), 900);
+        assert_eq!(scaled_word(7, false, 0.5) as i32, 4);
+        assert_eq!(scaled_word(-3i32 as u32, false, 2.0) as i32, -6);
+    }
 
     fn width(kind: RowKind) -> usize {
         match kind {

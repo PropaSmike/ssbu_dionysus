@@ -1229,11 +1229,12 @@ unsafe fn report_owner_fields(kind: i32, payload: usize) {
         ));
         return;
     }
-    for (public_kind, offset, bits) in targets {
+    for (public_kind, offset, bits, mul) in targets {
         if !crate::item_params::owner_offset_valid(offset) {
             continue;
         }
         let raw = core::ptr::read_volatile((payload + offset as usize) as *const u32);
+        let bits = crate::item_params::owner_value(kind, offset, raw, bits, mul);
         crate::dbg_log_public(&format!(
             "[ownerparam] {kind} loaded for public={public_kind:#x}: +{offset:#x} holds {raw:#x}, {}, override {}",
             dionysus_core::owner_param_words::describe(kind, offset, raw),

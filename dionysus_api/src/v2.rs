@@ -308,11 +308,8 @@ impl Fighter {
         Article::new(self, name, true)
     }
 
-    pub fn cpu_param(&self, name: &str) -> CpuParam {
-        CpuParam {
-            kind: self.kind().get(),
-            name: name.to_string(),
-        }
+    pub fn cpu_param(&self, name: &str) -> crate::RowParam {
+        crate::RowParam::new(&CPU_PARAM_FN, b"clone_engine_cpu_param_set\0", self.kind().get(), name)
     }
 
     pub fn param(&self, name: &str) -> Param<'_> {
@@ -508,37 +505,8 @@ impl Article {
 
 static CPU_PARAM_FN: AtomicUsize = AtomicUsize::new(0);
 
-pub fn cpu_param(kind: i32, name: &str) -> CpuParam {
-    CpuParam {
-        kind: Some(kind),
-        name: name.to_string(),
-    }
-}
-
-pub struct CpuParam {
-    kind: Option<i32>,
-    name: String,
-}
-
-impl CpuParam {
-    fn apply(&self, tag: u32, bits: u64) -> bool {
-        let Some(kind) = self.kind else {
-            return false;
-        };
-        crate::row_call(&CPU_PARAM_FN, b"clone_engine_cpu_param_set\0", kind, &self.name, tag, bits).is_ok()
-    }
-
-    pub fn set(self, value: f64) -> bool {
-        self.apply(dionysus_core::row_fields::TAG_F32, u64::from((value as f32).to_bits()))
-    }
-
-    pub fn mul(self, value: f64) -> bool {
-        self.apply(dionysus_core::row_fields::TAG_MUL, u64::from((value as f32).to_bits()))
-    }
-
-    pub fn int(self, value: i32) -> bool {
-        self.apply(dionysus_core::row_fields::TAG_I32, u64::from(value as u32))
-    }
+pub fn cpu_param(kind: i32, name: &str) -> crate::RowParam {
+    crate::RowParam::new(&CPU_PARAM_FN, b"clone_engine_cpu_param_set\0", Some(kind), name)
 }
 
 pub struct Param<'a> {
@@ -559,11 +527,19 @@ impl Param<'_> {
         self
     }
 
+    fn names(&self) -> (&str, &str) {
+        match self.name.split_once('.') {
+            Some((group, field)) if self.subparam.is_empty() => (group, field),
+            _ => (&self.name, &self.subparam),
+        }
+    }
+
     fn apply(&self, op: ParamOp, value: f64) -> bool {
         let Some(kind) = self.fighter.kind().get() else {
             return false;
         };
-        param_override_full(kind, self.slot, &self.name, &self.subparam, op, value)
+        let (name, subparam) = self.names();
+        param_override_full(kind, self.slot, name, subparam, op, value)
     }
 
     pub fn set(self, value: f64) -> bool {
@@ -578,7 +554,8 @@ impl Param<'_> {
         let Some(kind) = self.fighter.kind().get() else {
             return false;
         };
-        param_int_override_full(kind, self.slot, &self.name, &self.subparam, value)
+        let (name, subparam) = self.names();
+        param_int_override_full(kind, self.slot, name, subparam, value)
     }
 }
 
@@ -1237,14 +1214,43 @@ impl Item {
         self.status_raw(line, status_name, function as *const ())
     }
 
-    pub fn owner_param(&self, owner: &str, field: &str) -> OwnerParam<'_> {
+    pub fn owner_param(&self, owner: &str, field: &str) -> OwnerParam {
         OwnerParam {
-            item: self,
+            item_kind: self.kind().get(),
+            item: self.identity.to_string(),
             owner: owner.to_string(),
             field: field.to_string(),
         }
     }
+
+    pub fn param(&self, name: &str) -> crate::AssetParam {
+        crate::AssetParam::new(crate::SPACE_ITEM, self.kind().get().map(|kind| kind as u64), name)
+    }
+
+    pub fn common(&self, field: &str) -> crate::ItemCommon {
+        crate::ItemCommon::new(self.kind().get(), field)
+    }
 }
+
+pub fn item_param(kind: i32, name: &str) -> crate::AssetParam {
+    crate::AssetParam::new(crate::SPACE_ITEM, Some(kind as u64), name)
+}
+
+pub fn item_common(kind: i32, field: &str) -> crate::ItemCommon {
+    crate::ItemCommon::new(Some(kind), field)
+}
+
+pub fn item_owner_param(kind: i32, owner: &str, field: &str) -> OwnerParam {
+    OwnerParam {
+        item_kind: Some(kind),
+        item: format!("{kind:#x}"),
+        owner: owner.to_string(),
+        field: field.to_string(),
+    }
+}
+
+type OwnerMulFn = unsafe extern "C" fn(i32, i32, u32, f32) -> i32;
+static OWNER_MUL_FN: AtomicUsize = AtomicUsize::new(0);
 
 type FighterKindByNameFn = unsafe extern "C" fn(*const std::os::raw::c_char) -> i32;
 static FIGHTER_KIND_BY_NAME_FN: AtomicUsize = AtomicUsize::new(0);
@@ -1257,15 +1263,32 @@ pub fn fighter_kind_by_name(name: &str) -> Option<i32> {
     (kind >= 0).then_some(kind)
 }
 
-pub struct OwnerParam<'a> {
-    item: &'a Item,
+pub struct OwnerParam {
+    item_kind: Option<i32>,
+    item: String,
     owner: String,
     field: String,
 }
 
-impl OwnerParam<'_> {
+impl OwnerParam {
+    pub fn int(self, value: i32) -> bool {
+        self.set(f64::from(value))
+    }
+
+    pub fn mul(self, value: f64) -> bool {
+        let Some((item_kind, owner_kind, word)) = self.resolve() else {
+            elog!("[clone_engine] item {}: no owner param {}/{}", self.item, self.owner, self.field);
+            return false;
+        };
+        let Some(address) = resolve(&OWNER_MUL_FN, b"clone_engine_item_owner_param_mul\0") else {
+            return false;
+        };
+        let function: OwnerMulFn = unsafe { core::mem::transmute(address) };
+        unsafe { function(item_kind, owner_kind, u32::from(word.offset), value as f32) == crate::RESULT_OK }
+    }
+
     fn resolve(&self) -> Option<(i32, i32, &'static dionysus_core::owner_param_words::Word)> {
-        let item_kind = self.item.kind().get()?;
+        let item_kind = self.item_kind?;
         let owner_kind = fighter_kind_by_name(&self.owner)?;
         let word = dionysus_core::owner_param_words::words_of(owner_kind)
             .iter()
@@ -1277,7 +1300,7 @@ impl OwnerParam<'_> {
         let Some((item_kind, owner_kind, word)) = self.resolve() else {
             elog!(
                 "[clone_engine] item {}: no owner param {}/{}",
-                self.item.identity,
+                self.item,
                 self.owner,
                 self.field
             );
@@ -1294,7 +1317,7 @@ impl OwnerParam<'_> {
             Err(error) => {
                 elog!(
                     "[clone_engine] item {}: owner param {}/{} refused: {error:?}",
-                    self.item.identity,
+                    self.item,
                     self.owner,
                     self.field
                 );

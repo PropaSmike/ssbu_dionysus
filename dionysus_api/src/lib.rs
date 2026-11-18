@@ -510,49 +510,160 @@ pub enum Error {
     Engine(i32),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RowValue {
-    Float(f32),
-    Int(i32),
-    Bool(bool),
-    Hash(u64),
-}
-
-impl RowValue {
-    pub(crate) fn tagged(self) -> (u32, u64) {
-        use dionysus_core::row_fields::{TAG_BOOL, TAG_F32, TAG_HASH, TAG_I32};
-        match self {
-            RowValue::Float(value) => (TAG_F32, u64::from(value.to_bits())),
-            RowValue::Int(value) => (TAG_I32, u64::from(value as u32)),
-            RowValue::Bool(value) => (TAG_BOOL, u64::from(value)),
-            RowValue::Hash(value) => (TAG_HASH, value),
-        }
-    }
-}
-
-impl From<f32> for RowValue {
-    fn from(value: f32) -> Self {
-        RowValue::Float(value)
-    }
-}
-
-impl From<i32> for RowValue {
-    fn from(value: i32) -> Self {
-        RowValue::Int(value)
-    }
-}
-
-impl From<bool> for RowValue {
-    fn from(value: bool) -> Self {
-        RowValue::Bool(value)
-    }
-}
-
 type RowSetFn = unsafe extern "C" fn(i32, u64, u32, u64) -> i32;
 
-pub(crate) fn row_set(slot: &AtomicUsize, symbol: &'static [u8], kind: i32, field: &str, value: RowValue) -> Result<(), Error> {
-    let (tag, bits) = value.tagged();
-    row_call(slot, symbol, kind, field, tag, bits)
+type AssetParamFn = unsafe extern "C" fn(u32, u64, u64, u64, u32, u64) -> i32;
+
+static ASSET_PARAM_FN: AtomicUsize = AtomicUsize::new(0);
+
+pub(crate) const SPACE_ITEM: u32 = 1;
+pub(crate) const SPACE_ENEMY: u32 = 2;
+pub(crate) const SPACE_STAGE: u32 = 3;
+
+pub struct AssetParam {
+    space: u32,
+    owner: Option<u64>,
+    name: String,
+    sub: Option<String>,
+}
+
+impl AssetParam {
+    pub(crate) fn new(space: u32, owner: Option<u64>, name: &str) -> Self {
+        Self {
+            space,
+            owner,
+            name: name.to_string(),
+            sub: None,
+        }
+    }
+
+    pub fn sub(mut self, field: &str) -> Self {
+        self.sub = Some(field.to_string());
+        self
+    }
+
+    fn key(&self) -> (u64, u64) {
+        match &self.sub {
+            Some(field) => (dionysus_core::prcxml::key(&self.name), dionysus_core::prcxml::key(field)),
+            None => dionysus_core::prcxml::asset_key(&self.name),
+        }
+    }
+
+    fn apply(&self, tag: u32, bits: u64) -> bool {
+        let Some(owner) = self.owner else {
+            return false;
+        };
+        let Some(address) = resolve(&ASSET_PARAM_FN, b"clone_engine_asset_param_set\0") else {
+            return false;
+        };
+        let function: AssetParamFn = unsafe { core::mem::transmute(address) };
+        let (group, field) = self.key();
+        unsafe { function(self.space, owner, group, field, tag, bits) == 0 }
+    }
+
+    pub fn set(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_F32, float_bits(value))
+    }
+
+    pub fn mul(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_MUL, float_bits(value))
+    }
+
+    pub fn int(self, value: i32) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_I32, u64::from(value as u32))
+    }
+}
+
+pub(crate) fn float_bits(value: f64) -> u64 {
+    u64::from((value as f32).to_bits())
+}
+
+pub struct RowParam {
+    slot: &'static AtomicUsize,
+    symbol: &'static [u8],
+    kind: Option<i32>,
+    name: String,
+}
+
+impl RowParam {
+    pub(crate) fn new(slot: &'static AtomicUsize, symbol: &'static [u8], kind: Option<i32>, name: &str) -> Self {
+        Self {
+            slot,
+            symbol,
+            kind,
+            name: name.to_string(),
+        }
+    }
+
+    fn apply(&self, tag: u32, bits: u64) -> bool {
+        let Some(kind) = self.kind else {
+            return false;
+        };
+        row_call(self.slot, self.symbol, kind, &self.name, tag, bits).is_ok()
+    }
+
+    pub fn set(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_F32, float_bits(value))
+    }
+
+    pub fn mul(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_MUL, float_bits(value))
+    }
+
+    pub fn int(self, value: i32) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_I32, u64::from(value as u32))
+    }
+
+    pub fn hash(self, value: &str) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_HASH, dionysus_core::prcxml::key(value))
+    }
+}
+
+static ITEM_COMMON_PARAM_FN: AtomicUsize = AtomicUsize::new(0);
+
+pub struct ItemCommon {
+    kind: Option<i32>,
+    field: u64,
+}
+
+impl ItemCommon {
+    pub(crate) fn new(kind: Option<i32>, field: &str) -> Self {
+        Self {
+            kind,
+            field: dionysus_core::prcxml::key(field),
+        }
+    }
+
+    fn apply(&self, tag: u32, bits: u64) -> bool {
+        let Some(kind) = self.kind else {
+            return false;
+        };
+        let Some(address) = resolve(&ITEM_COMMON_PARAM_FN, b"clone_engine_item_common_param\0") else {
+            return false;
+        };
+        let function: RowSetFn = unsafe { core::mem::transmute(address) };
+        unsafe { function(kind, self.field, tag, bits) == RESULT_OK }
+    }
+
+    pub fn set(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_F32, float_bits(value))
+    }
+
+    pub fn mul(self, value: f64) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_MUL, float_bits(value))
+    }
+
+    pub fn int(self, value: i32) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_I32, u64::from(value as u32))
+    }
+
+    pub fn label(self, value: &str) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_LABEL, dionysus_core::prcxml::key(value))
+    }
+
+    pub fn hash(self, value: &str) -> bool {
+        self.apply(dionysus_core::row_fields::TAG_HASH, dionysus_core::prcxml::key(value))
+    }
 }
 
 pub(crate) fn row_call(slot: &AtomicUsize, symbol: &'static [u8], kind: i32, field: &str, tag: u32, bits: u64) -> Result<(), Error> {

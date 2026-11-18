@@ -665,6 +665,13 @@ fn mint(directory: &str, declaration: &PackDeclaration) {
         if let Some(area) = crate::param_files::stage_area(directory, &places, tree) {
             crate::stage_rows::set_area(place_hash, area);
         }
+        if let Some(path) = places
+            .iter()
+            .map(|place| crate::param_files::path(directory, &["stage", place, tree, "param", "param.prcxml"]))
+            .find(|candidate| candidate.is_file())
+        {
+            crate::param_files::asset_params(&path, "stagepack", directory, crate::custom_params::Space::Stage, place_hash);
+        }
     }
 
     if ships_stdat(directory, &stage) {

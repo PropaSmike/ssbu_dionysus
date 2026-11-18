@@ -116,8 +116,12 @@ pub fn object(index: u32) -> u32 {
     unsafe { function(index) }
 }
 
-pub fn set_common(kind: u32, field: &str, value: impl Into<crate::RowValue>) -> Result<(), Error> {
-    crate::row_set(&COMMON_FN, b"clone_engine_enemy_common_set\0", kind as i32, field, value.into())
+pub fn param(kind: u32, name: &str) -> crate::AssetParam {
+    crate::AssetParam::new(crate::SPACE_ENEMY, Some(u64::from(kind)), name)
+}
+
+pub fn common(kind: u32, field: &str) -> crate::RowParam {
+    crate::RowParam::new(&COMMON_FN, b"clone_engine_enemy_common_set\0", Some(kind as i32), field)
 }
 
 pub fn clone(base: u32, name: &str) -> Result<u32, Error> {

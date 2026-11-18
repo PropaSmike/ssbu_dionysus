@@ -27,28 +27,107 @@ fn checked(result: i32) -> Result<(), Error> {
     Ok(())
 }
 
-fn sound(place: &str, reverb: i32, scale: f32, offset: f32) -> Result<(), Error> {
-    let address = resolve(&SOUND_FN, b"clone_engine_stage_sound_set\0").ok_or(Error::EngineUnavailable)?;
-    let function: SoundFn = unsafe { std::mem::transmute(address) };
-    checked(unsafe { function(set_hash(place), reverb, scale, offset) })
+#[derive(Clone, Copy, PartialEq)]
+enum Row {
+    Sound,
+    Area,
 }
 
-pub fn set_reverb(place: &str, preset: u32) -> Result<(), Error> {
-    sound(place, preset.min(i32::MAX as u32) as i32, f32::NAN, f32::NAN)
+pub struct StageRow {
+    row: Row,
+    place: u64,
+    field: String,
 }
 
-pub fn set_sound_scale(place: &str, scale: f32) -> Result<(), Error> {
-    sound(place, -1, scale, f32::NAN)
+pub fn sound(place: &str, field: &str) -> StageRow {
+    StageRow {
+        row: Row::Sound,
+        place: set_hash(place),
+        field: field.to_string(),
+    }
 }
 
-pub fn set_sound_offset(place: &str, offset: f32) -> Result<(), Error> {
-    sound(place, -1, f32::NAN, offset)
+pub fn cpu_area(place: &str, field: &str) -> StageRow {
+    StageRow {
+        row: Row::Area,
+        place: set_hash(place),
+        field: field.to_string(),
+    }
 }
 
-pub fn set_cpu_area(place: &str, x0: f32, y0: f32, x1: f32, y1: f32) -> Result<(), Error> {
-    let address = resolve(&AREA_FN, b"clone_engine_stage_area_set\0").ok_or(Error::EngineUnavailable)?;
-    let function: AreaFn = unsafe { std::mem::transmute(address) };
-    checked(unsafe { function(set_hash(place), x0, y0, x1, y1) })
+impl StageRow {
+    fn apply(&self, value: f32) -> bool {
+        if value.is_nan() {
+            return false;
+        }
+        let field = self.field.trim_end_matches('_').to_ascii_lowercase();
+        match self.row {
+            Row::Sound => {
+                let (reverb, scale, offset) = match field.as_str() {
+                    "reverb_type" if value >= 0.0 => (value.round() as i32, f32::NAN, f32::NAN),
+                    "scale" => (-1, value, f32::NAN),
+                    "offset" => (-1, f32::NAN, value),
+                    _ => return false,
+                };
+                let Some(address) = resolve(&SOUND_FN, b"clone_engine_stage_sound_set\0") else {
+                    return false;
+                };
+                let function: SoundFn = unsafe { std::mem::transmute(address) };
+                unsafe { function(self.place, reverb, scale, offset) >= 0 }
+            }
+            Row::Area => {
+                let Some(edge) = ["x0", "y0", "x1", "y1"].iter().position(|name| *name == field) else {
+                    return false;
+                };
+                let mut edges = [f32::NAN; 4];
+                edges[edge] = value;
+                let Some(address) = resolve(&AREA_FN, b"clone_engine_stage_area_set\0") else {
+                    return false;
+                };
+                let function: AreaFn = unsafe { std::mem::transmute(address) };
+                unsafe { function(self.place, edges[0], edges[1], edges[2], edges[3]) >= 0 }
+            }
+        }
+    }
+
+    pub fn set(self, value: f64) -> bool {
+        self.apply(value as f32)
+    }
+
+    pub fn int(self, value: i32) -> bool {
+        self.apply(value as f32)
+    }
+}
+
+type ParamGetFn = unsafe extern "C" fn(u64, u64, *mut u64) -> i32;
+
+static PARAM_GET_FN: AtomicUsize = AtomicUsize::new(0);
+
+pub fn param(place: &str, name: &str) -> crate::AssetParam {
+    crate::AssetParam::new(crate::SPACE_STAGE, Some(set_hash(place)), name)
+}
+
+fn read_param(name: &str) -> Option<(i32, u64)> {
+    let address = resolve(&PARAM_GET_FN, b"clone_engine_stage_param_get\0")?;
+    let function: ParamGetFn = unsafe { std::mem::transmute(address) };
+    let (group, field) = dionysus_core::prcxml::asset_key(name);
+    let mut bits = 0u64;
+    let tag = unsafe { function(group, field, &mut bits) };
+    (tag >= 0).then_some((tag, bits))
+}
+
+pub fn param_float(name: &str) -> Option<f32> {
+    match read_param(name)? {
+        (0, bits) => Some(f32::from_bits(bits as u32)),
+        (_, bits) => Some(bits as u32 as i32 as f32),
+    }
+}
+
+pub fn param_int(name: &str) -> Option<i32> {
+    match read_param(name)? {
+        (0, bits) => Some(f32::from_bits(bits as u32).round() as i32),
+        (_, bits) => Some(bits as u32 as i32),
+    }
 }
 
 pub fn set_item(place: &str, item: &str, on: bool) -> Result<(), Error> {

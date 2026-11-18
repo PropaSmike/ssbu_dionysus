@@ -40,6 +40,8 @@ enum Change {
     Mul(f32),
 }
 
+const IDENTITY_OFFSET: usize = 0;
+
 static OWN: Mutex<Option<HashMap<i32, Vec<(&'static RowField, Change)>>>> = Mutex::new(None);
 static APPENDED: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
 static AIS: Mutex<Option<HashMap<usize, i32>>> = Mutex::new(None);
@@ -75,6 +77,9 @@ fn apply(row: &mut [u8], base: &[u8], field: &RowField, change: Change) {
 
 pub(crate) fn set(kind: i32, hash: u64, value: &Value) -> Result<(), Why> {
     let field = row_fields::find(&cpu::FIELDS, hash).ok_or(Why::Unknown)?;
+    if field.offset == IDENTITY_OFFSET {
+        return Err(Why::Label);
+    }
     let converted = row_fields::convert(field, value)?;
     store(kind, field, Change::Set(converted));
     unsafe { write_live(kind, field, Change::Set(converted)) };

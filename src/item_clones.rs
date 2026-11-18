@@ -706,6 +706,97 @@ pub(crate) unsafe fn live_identity_of_object(object: usize) -> Option<(i32, i32)
     })
 }
 
+unsafe fn live_identity_of_boma(boma: usize) -> Option<(i32, i32)> {
+    if boma == 0 || LIVE_COUNT.load(Ordering::Acquire) == 0 {
+        return None;
+    }
+    let object_id = core::ptr::read_volatile((boma + BOMA_OBJECT_ID) as *const u32);
+    LIVE.iter().find_map(|slot| {
+        (slot.state.load(Ordering::Acquire) == 2
+            && (slot.boma.load(Ordering::Acquire) == boma
+                || slot.object_id.load(Ordering::Acquire) == object_id))
+            .then(|| {
+                (
+                    slot.public_kind.load(Ordering::Relaxed),
+                    slot.base_kind.load(Ordering::Relaxed),
+                )
+            })
+    })
+}
+
+const ITEM_LUA_VTABLE: usize = 0x5077008;
+const LUA_MODULE_ACCESSOR: usize = 8;
+const BOMA_OBJECT_ID: usize = 8;
+const LUA_EXEC: usize = 0;
+const LUA_END: usize = 1;
+const LUA_START: usize = 2;
+const LUA_SLOTS: [(usize, usize); 3] = [(0xe0, 0x161b780), (0xe8, 0x161bc70), (0xf0, 0x161bd60)];
+
+static LUA_PREVIOUS: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
+
+unsafe fn status_scope(module: usize) -> Option<usize> {
+    if module == 0 || LIVE_COUNT.load(Ordering::Acquire) == 0 {
+        return None;
+    }
+    let boma = core::ptr::read_volatile((module + LUA_MODULE_ACCESSOR) as *const usize);
+    let (public, base) = live_identity_of_boma(boma)?;
+    crate::item_params::enter_runtime_clone(public, base)
+}
+
+unsafe fn close_status_scope(scope: Option<usize>) {
+    if let Some(index) = scope {
+        crate::item_params::leave_runtime_clone(index);
+    }
+}
+
+unsafe extern "C" fn lua_status_exec(module: usize, rate: f32) -> u64 {
+    let scope = status_scope(module);
+    let previous: unsafe extern "C" fn(usize, f32) -> u64 =
+        core::mem::transmute(LUA_PREVIOUS[LUA_EXEC].load(Ordering::Acquire));
+    let result = previous(module, rate);
+    close_status_scope(scope);
+    result
+}
+
+unsafe extern "C" fn lua_status_end(module: usize) -> u64 {
+    let scope = status_scope(module);
+    let previous: unsafe extern "C" fn(usize) -> u64 =
+        core::mem::transmute(LUA_PREVIOUS[LUA_END].load(Ordering::Acquire));
+    let result = previous(module);
+    close_status_scope(scope);
+    result
+}
+
+unsafe extern "C" fn lua_status_start(module: usize) -> u64 {
+    let scope = status_scope(module);
+    let previous: unsafe extern "C" fn(usize) -> u64 =
+        core::mem::transmute(LUA_PREVIOUS[LUA_START].load(Ordering::Acquire));
+    let result = previous(module);
+    close_status_scope(scope);
+    result
+}
+
+unsafe fn install_status_scope() -> bool {
+    let table = crate::game::addr(ITEM_LUA_VTABLE);
+    let intact = LUA_SLOTS.iter().all(|(slot, original)| {
+        core::ptr::read_volatile((table + slot) as *const usize) == crate::game::addr(*original)
+    });
+    if !intact {
+        return false;
+    }
+    let wrappers = [
+        lua_status_exec as *const () as usize,
+        lua_status_end as *const () as usize,
+        lua_status_start as *const () as usize,
+    ];
+    for (index, (_, original)) in LUA_SLOTS.iter().enumerate() {
+        LUA_PREVIOUS[index].store(crate::game::addr(*original), Ordering::Release);
+    }
+    LUA_SLOTS.iter().zip(wrappers).all(|((slot, _), wrapper)| {
+        crate::text_patch::write_bytes(table + slot, &wrapper.to_le_bytes())
+    })
+}
+
 #[skyline::hook(offset = crate::game::rel(OFF_BATTLE_OBJECT_UPDATE))]
 unsafe fn battle_object_update(object: *mut u8) {
     crate::block_grid::sample();
@@ -2642,6 +2733,78 @@ fn clone_engine_item_owner_param_set_bits(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn clone_engine_item_common_param(item_kind: i32, field: u64, tag: u32, bits: u64) -> i32 {
+    use dionysus_core::item_common_row::{self as row, WordKind};
+    use dionysus_core::row_fields::{TAG_BOOL, TAG_F32, TAG_HASH, TAG_I32, TAG_LABEL, TAG_MUL};
+    if definition(item_kind).is_none() {
+        return ERROR_CUSTOM_KIND;
+    }
+    let float = crate::item_params::common_field_offset(field);
+    let int_word = row::word(field).filter(|word| word.kind == WordKind::Int);
+    match tag {
+        TAG_F32 => match (float, int_word) {
+            (Some(_), _) => clone_engine_item_common_set(item_kind, field, f32::from_bits(bits as u32)),
+            (None, Some(_)) => {
+                clone_engine_item_common_set_i32(item_kind, field, f32::from_bits(bits as u32).round() as i32)
+            }
+            _ => common_word_refusal(field, row::Reject::UnknownField),
+        },
+        TAG_I32 | TAG_BOOL => match float {
+            Some(_) => clone_engine_item_common_set(item_kind, field, bits as u32 as i32 as f32),
+            None => clone_engine_item_common_set_i32(item_kind, field, bits as u32 as i32),
+        },
+        TAG_LABEL => clone_engine_item_common_set_label(item_kind, field, bits),
+        TAG_HASH => clone_engine_item_common_set_hash(item_kind, field, bits),
+        TAG_MUL => {
+            let factor = f32::from_bits(bits as u32);
+            let target = match (float, int_word) {
+                (Some(offset), _) => Some((crate::item_params::CommonTable::Float, offset)),
+                (None, Some(word)) => Some((crate::item_params::CommonTable::Word, word.offset)),
+                _ => None,
+            };
+            let Some((table, offset)) = target else {
+                log(format!(
+                    "[itemclone] item_common mul refused public={item_kind:#x} field={field:#x}: only number fields scale"
+                ));
+                return ERROR_UNSUPPORTED;
+            };
+            match crate::item_params::register_common_mul(item_kind, table, offset, factor) {
+                true => {
+                    log(format!(
+                        "[itemclone] item_common public={item_kind:#x} field={field:#x} -> +{offset:#x} times {factor}"
+                    ));
+                    RESULT_OK
+                }
+                false => ERROR_BACKEND_UNAVAILABLE,
+            }
+        }
+        _ => ERROR_UNSUPPORTED,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn clone_engine_item_owner_param_mul(item_kind: i32, owner_kind: i32, offset: u32, factor: f32) -> i32 {
+    if definition(item_kind).is_none() {
+        return ERROR_CUSTOM_KIND;
+    }
+    if !(0..crate::fighter_params::PARAM_NATIVE_KINDS).contains(&owner_kind)
+        || !crate::item_params::owner_offset_valid(offset)
+    {
+        return ERROR_UNSUPPORTED;
+    }
+    match crate::item_params::register_owner_mul(item_kind, owner_kind, offset, factor) {
+        true => {
+            log(format!(
+                "[itemclone] item_owner_param public={item_kind:#x} owner={owner_kind} +{offset:#x} times {factor} ({} override(s) for this item)",
+                crate::item_params::owner_override_count(item_kind)
+            ));
+            RESULT_OK
+        }
+        false => ERROR_UNSUPPORTED,
+    }
+}
+
 fn common_word_refusal(field: u64, reject: dionysus_core::item_common_row::Reject) -> i32 {
     use dionysus_core::item_common_row::Reject;
     let why = match reject {
@@ -2875,6 +3038,11 @@ pub fn install() {
             battle_object_update
         );
         BACKEND_STATUS.fetch_or(STATUS_IDENTITY_HOOKS_READY, Ordering::AcqRel);
+        if install_status_scope() {
+            log("[itemclone] clone items run every status change as themselves".to_string());
+        } else {
+            log("[itemclone] the item status table holds other entries; a status change made by another object reads the base item's params".to_string());
+        }
     }
     match skyline::nro::add_hook(item_nro_hook) {
         Ok(()) => {

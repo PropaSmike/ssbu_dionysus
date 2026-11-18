@@ -127,7 +127,7 @@ pub fn main() {
     };
 
     csk::publish();
-    params::install(kind);
+    params::install();
 
     Agent::new("template_fighter") // scripts under the clone's own name, never "mario"
         .game_acmd("game_attack11", acmd::game_attack11, Priority::Default) // script name, function, priority

@@ -83,6 +83,26 @@ base's keep theirs. An article ignores the group it is asked for, so its code
 can read `get_param_float(boma, hash40("param_fireball"), hash40("speed"))`.
 Only values for every costume reach articles.
 
+Items, enemies and stages take keys of their own too, from a `param.prcxml`
+or from code, with no ParamConfig. A value at the top of the file is in the
+group `param`; a struct is a group of its own.
+
+| Clone | File | Read with |
+|---|---|---|
+| Item | `item/<name>/param/param.prcxml` | `app::item::self_param_float(kind, hash40("key"))`, `self_struct_param_float(kind, hash40("group"), hash40("key"))`, or `WorkModule::get_param_float(boma, hash40("param"), hash40("key"))` |
+| Enemy | `enemy/<name>/param/param.prcxml` | `WorkModule::get_param_float(boma, hash40("param"), hash40("key"))` |
+| Stage | `stage/<place>/normal/param/param.prcxml` | `dionysus_api::stage::param_float("key")`, for the stage being played |
+
+```rust
+WAWA.param("speed").set(2.0);                                // or v2::item_param(kind, "speed")
+dionysus_api::enemy::param(kind, "my_group.range").mul(1.5); // "group.key" for a group
+dionysus_api::stage::param("my_stage", "wind").set(0.5);
+```
+
+Code sets over the file. A key the game has (an item's `have_scale`) answers
+your value too, and `.mul` scales the game's value (not for stages). A key
+nobody set reads 0, or `None` on a stage.
+
 ## Your own parameter files
 
 Ship `fighter/<your name>/param/vl.prc` and it is used instead of the
@@ -107,6 +127,7 @@ whatever its index or `name_hash`; no ParamConfig needed) or set it with
 | `fighter_param_motion.prc` (`param_motion`), the `fighter/common/param/` files (`common`) | `[params]`, prcxml |
 | throw positions (`param_thrown`) | `[params]` |
 | keys of your own (new fields, new groups) | `[params]`, `vl.prcxml` |
+| keys of your own on items, enemies and stages | `param.prcxml`, `param` in code |
 | your articles' blocks (`param_<article>`) | `[params]`, `vl.prcxml`, your own `vl.prc` |
 | the computer player's row (`fighter/common/ai/param/fighter_param.prc`) | prcxml, `cpu_param` |
 | lists and arrays in `vl.prc` (`hit_data`, ...) | your own `vl.prc` |
@@ -119,19 +140,19 @@ them to ParamConfig.
 
 ## In code
 
-A plugin can do the same. ParamConfig's calls work unchanged with the clone's
-kind; `vec![-1]` is every costume.
+A plugin can do the same. Every param call has one shape: name the value,
+then `.set`, `.mul` or `.int` ([API](../API.md#parameters)).
 
 ```rust
-let kind = MY_FIGHTER.kind().get().unwrap();
-
-param_config::update_float(kind, vec![-1], (hash40("param_special_hi"), hash40("y_spd_air")), 1.5);
-param_config::update_attribute_mul(kind, vec![3], (hash40("param_special_n"), hash40("fireball_speed_mul")), 1.15); // costume 3 only
-param_config::disable_kirby_copy(kind, vec![-1]);
-
+MY_FIGHTER.param("param_special_hi.y_spd_air").set(1.5);                 // a vl.prc value
+MY_FIGHTER.param("param_special_n.fireball_speed_mul").slot(3).mul(1.15); // costume 3 only
 MY_FIGHTER.param("walk_speed_max").set(1.2);
-MY_FIGHTER.param("param_motion").sub("flip").int(0);
-MY_FIGHTER.param("common").sub("shield_max").set(20.0);
-MY_FIGHTER.param("param_thrown").sub("held_offset").mul(1.2);
+MY_FIGHTER.param("param_motion.flip").int(0);
+MY_FIGHTER.param("common.shield_max").set(20.0);
+MY_FIGHTER.param("param_thrown.held_offset").mul(1.2);
 MY_FIGHTER.cpu_param("width").set(12.0);
 ```
+
+ParamConfig's own calls also work with the clone's kind (`vec![-1]` is every
+costume), for what has no param call, such as
+`param_config::disable_kirby_copy(kind, vec![-1])`.

@@ -1100,6 +1100,7 @@ struct CommonOverride {
     table: CommonTable,
     offset: u32,
     bits: u64,
+    mul: bool,
 }
 
 fn common_overrides() -> &'static RwLock<Vec<CommonOverride>> {
@@ -1120,6 +1121,7 @@ struct OwnerOverride {
     owner_kind: i32,
     offset: u32,
     bits: u32,
+    mul: bool,
     reported: AtomicBool,
 }
 
@@ -1147,6 +1149,21 @@ pub(crate) fn register_owner_override(
     offset: u32,
     bits: u32,
 ) -> bool {
+    store_owner_override(public_kind, owner_kind, offset, bits, false)
+}
+
+pub(crate) fn register_owner_mul(public_kind: i32, owner_kind: i32, offset: u32, factor: f32) -> bool {
+    let scalable = dionysus_core::owner_param_words::word_at(owner_kind, offset)
+        .map_or(false, |word| word.kind != dionysus_core::owner_param_words::WordKind::Bool);
+    scalable && store_owner_override(public_kind, owner_kind, offset, factor.to_bits(), true)
+}
+
+fn owner_word_is_float(owner_kind: i32, offset: u32) -> bool {
+    dionysus_core::owner_param_words::word_at(owner_kind, offset)
+        .map_or(false, |word| word.kind == dionysus_core::owner_param_words::WordKind::F32)
+}
+
+fn store_owner_override(public_kind: i32, owner_kind: i32, offset: u32, bits: u32, mul: bool) -> bool {
     if !owner_offset_valid(offset) {
         return false;
     }
@@ -1156,28 +1173,40 @@ pub(crate) fn register_owner_override(
     match overrides.iter_mut().find(|e| {
         e.public_kind == public_kind && e.owner_kind == owner_kind && e.offset == offset
     }) {
-        Some(existing) => existing.bits = bits,
+        Some(existing) => {
+            existing.bits = bits;
+            existing.mul = mul;
+        }
         None => overrides.push(OwnerOverride {
             public_kind,
             owner_kind,
             offset,
             bits,
+            mul,
             reported: AtomicBool::new(false),
         }),
     }
     true
 }
 
-pub(crate) fn owner_targets(owner_kind: i32) -> Vec<(i32, u32, u32)> {
+pub(crate) fn owner_targets(owner_kind: i32) -> Vec<(i32, u32, u32, bool)> {
     owner_overrides()
         .read()
         .map(|held| {
             held.iter()
                 .filter(|e| e.owner_kind == owner_kind)
-                .map(|e| (e.public_kind, e.offset, e.bits))
+                .map(|e| (e.public_kind, e.offset, e.bits, e.mul))
                 .collect()
         })
         .unwrap_or_default()
+}
+
+pub(crate) fn owner_value(owner_kind: i32, offset: u32, raw: u32, bits: u32, mul: bool) -> u32 {
+    if mul {
+        dionysus_core::row_fields::scaled_word(raw, owner_word_is_float(owner_kind, offset), f32::from_bits(bits))
+    } else {
+        bits
+    }
 }
 
 unsafe fn apply_owner_overrides(scope: usize, public_kind: i32) {
@@ -1201,9 +1230,10 @@ unsafe fn apply_owner_overrides(scope: usize, public_kind: i32) {
         };
         let field = (payload + entry.offset as usize) as *mut u32;
         let before = core::ptr::read_volatile(field);
+        let bits = owner_value(entry.owner_kind, entry.offset, before, entry.bits, entry.mul);
         OWNER_SAVE_ADDRESS[scope][saved].store(field as usize, Ordering::Relaxed);
         OWNER_SAVE_BITS[scope][saved].store(before, Ordering::Relaxed);
-        core::ptr::write_volatile(field, entry.bits);
+        core::ptr::write_volatile(field, bits);
         saved += 1;
         if !entry.reported.swap(true, Ordering::Relaxed) {
             crate::dbg_log_public(&format!(
@@ -1216,8 +1246,8 @@ unsafe fn apply_owner_overrides(scope: usize, public_kind: i32) {
                     before
                 ),
                 dionysus_core::owner_param_words::word_at(entry.owner_kind, entry.offset)
-                    .map(|word| word.shown(entry.bits))
-                    .unwrap_or_else(|| format!("{:#x}", entry.bits))
+                    .map(|word| word.shown(bits))
+                    .unwrap_or_else(|| format!("{bits:#x}"))
             ));
         }
     }
@@ -1296,6 +1326,14 @@ pub(crate) fn register_common_bits(
     offset: u32,
     bits: u64,
 ) -> bool {
+    store_common_override(public_kind, table, offset, bits, false)
+}
+
+pub(crate) fn register_common_mul(public_kind: i32, table: CommonTable, offset: u32, factor: f32) -> bool {
+    table != CommonTable::Hash && store_common_override(public_kind, table, offset, u64::from(factor.to_bits()), true)
+}
+
+fn store_common_override(public_kind: i32, table: CommonTable, offset: u32, bits: u64, mul: bool) -> bool {
     if offset > SAVE_OFFSET_MASK {
         return false;
     }
@@ -1306,12 +1344,16 @@ pub(crate) fn register_common_bits(
         .iter_mut()
         .find(|e| e.public_kind == public_kind && e.table == table && e.offset == offset)
     {
-        Some(existing) => existing.bits = bits,
+        Some(existing) => {
+            existing.bits = bits;
+            existing.mul = mul;
+        }
         None => overrides.push(CommonOverride {
             public_kind,
             table,
             offset,
             bits,
+            mul,
         }),
     }
     true
@@ -1347,9 +1389,19 @@ unsafe fn apply_common_overrides(scope: usize, public_kind: i32, base_kind: i32)
             Ordering::Relaxed,
         );
         SAVE_VALUE[scope][saved].store(was, Ordering::Relaxed);
-        write_cell(field, entry.table, entry.bits);
-        static REPORTED: [AtomicBool; 3] = [const { AtomicBool::new(false) }; 3];
-        if !REPORTED[entry.table.tag() as usize].swap(true, Ordering::AcqRel) {
+        let bits = if entry.mul {
+            u64::from(dionysus_core::row_fields::scaled_word(
+                was as u32,
+                entry.table == CommonTable::Float,
+                f32::from_bits(entry.bits as u32),
+            ))
+        } else {
+            entry.bits
+        };
+        write_cell(field, entry.table, bits);
+        static REPORTED: [AtomicBool; 6] = [const { AtomicBool::new(false) }; 6];
+        let report = entry.table.tag() as usize + if entry.mul { 3 } else { 0 };
+        if !REPORTED[report].swap(true, Ordering::AcqRel) {
             crate::dbg_log_public(&format!(
                 "[itemcommon] OVERRIDE public={public_kind:#x} base={base_kind:#x} {} +{:#x}: {} -> {}",
                 match entry.table {
@@ -1359,7 +1411,7 @@ unsafe fn apply_common_overrides(scope: usize, public_kind: i32, base_kind: i32)
                 },
                 entry.offset,
                 show_bits(entry.table, was),
-                show_bits(entry.table, entry.bits)
+                show_bits(entry.table, bits)
             ));
         }
         saved += 1;
@@ -1443,7 +1495,7 @@ pub(crate) fn runtime_clone_on_thread() -> Option<i32> {
     })
 }
 
-fn runtime_clone_for_base(base_kind: i32) -> Option<i32> {
+pub(crate) fn runtime_clone_for_base(base_kind: i32) -> Option<i32> {
     let thread = unsafe { current_thread() };
     if thread == 0 {
         return None;
@@ -1553,6 +1605,22 @@ unsafe fn getter_redirect(ctx: &mut skyline::hooks::InlineCtx, site: usize) {
             GETTER_SITES[site].0
         ));
     }
+}
+
+pub(crate) fn getter_reads_safely(kind: i32) -> bool {
+    if (0..NATIVE_KIND_TERM as i32).contains(&kind) {
+        return true;
+    }
+    if !HOOKS_INSTALLED.load(Ordering::Acquire) {
+        return false;
+    }
+    try_fill();
+    let Some(index) = position_of(kind as usize) else {
+        return false;
+    };
+    let cells = unsafe { core::ptr::addr_of_mut!(CELLS[index]) };
+    FILLED[index].load(Ordering::Acquire)
+        && unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*cells).accessor_cell)) } != 0
 }
 
 macro_rules! getter_hook {

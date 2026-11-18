@@ -463,6 +463,10 @@ mod live {
         };
         use dionysus_core::item_common_row::{describe, Table};
         use dionysus_core::prcxml::{Skipped, Value, Why};
+        #[cfg(feature = "css_slot")]
+        if let Some(path) = crate::param_files::item_named_file(directory, resource, "param.prcxml") {
+            crate::param_files::asset_params(&path, "itempack", directory, crate::custom_params::Space::Item, kind as u64);
+        }
         let Some(path) = crate::param_files::item_file(directory, resource) else {
             return;
         };
