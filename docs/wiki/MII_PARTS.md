@@ -58,6 +58,11 @@ Each part copies every value of its `base` row, then changes these:
 | Names | `nam_mii_hat_<id>`, `nam_mii_body_<id>` in `ui/message/msg_name.xmsbt` |
 
 - `c00` to `c11` are the twelve favourite colours. Ship all twelve.
+- Each colour folder holds every file the base's colour folder has
+  (`model.xmb`, `dark_model.numatb`, `light_model.numatb`,
+  `metamon_model.numatb`, `model.nusrcmdlb`, ...), not only the ones a
+  replacement mod changes. A new part has no game files to fall back on, and
+  loading it can hang.
 - An outfit's motion folder holds the base's `update.prc`, `ik.prc`,
   `flip.prc` and `scharge.prc`, and `motion_list.bin` and `swing.prc` when
   the base has them.
