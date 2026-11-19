@@ -38,6 +38,8 @@ pub mod prcxml;
 pub mod row_fields;
 pub mod settings;
 pub mod slots;
+pub mod spirit_prcxml;
+pub mod spirits;
 pub mod stage_gimmicks;
 pub mod stage_items;
 pub mod stage_order;

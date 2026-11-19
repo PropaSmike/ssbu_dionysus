@@ -128,6 +128,7 @@ pub const CAP_PARTNER_SWAP: u64 = 1 << 23;
 pub const CAP_COMMAND_INPUTS: u64 = 1 << 24;
 pub const CAP_MOVE_LIST_PAGES: u64 = 1 << 25;
 pub const CAP_MII_PARTS: u64 = 1 << 26;
+pub const CAP_SPIRITS: u64 = 1 << 27;
 pub const CAP_RESEARCH_ITEM_FAMILIES: u64 = 1 << 32;
 pub const CAP_RESEARCH_ITEM_MULTIBASE_STATUS_RESERVED: u64 = 1 << 33;
 

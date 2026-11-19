@@ -161,7 +161,8 @@ game's Mob Smash popup. Its three rows scroll through every installed mode
 (L and R jump three), the selected mode's picture shows on the left and its
 description in the footer. Every pack's modes get a row of their own and
 share no button, code or menu state, so any number of packs can offer modes
-side by side.
+side by side. The same pack adds pages of spirit boards to the DLC Spirits
+popup (see [Spirits](SPIRITS.md#boards)).
 
 ```toml
 [[mode]]

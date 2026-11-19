@@ -34,7 +34,7 @@ own `param` folder:
 | `fighter/common/param/common.prc` | `fighter/<name>/param/common.prcxml` |
 
 `item.prcxml`, `etc.prcxml`, `power_up.prcxml`, `effect.prcxml` and
-`sound.prcxml` work the same way. The Clone Pack Workbench's Param files tab
+`sound.prcxml` work the same way. The Clone Pack Workbench's prcxml files tab
 starts each of these files, and the item, enemy and stage ones below, as a copy
 of the game's own values.
 
@@ -47,9 +47,10 @@ must be installed.
 Do not ship a prcxml for the shared file itself (`fighter/common/param/`):
 it changes the base for every player.
 
-Items take `common_param.prcxml` ([ITEMS.md](ITEMS.md)) and stages
+Items take `common_param.prcxml` ([ITEMS.md](ITEMS.md)), stages
 `item_switch_param.prcxml`, `stage_sound_settings.prcxml` and
-`stage_param.prcxml` ([STAGES.md](STAGES.md)).
+`stage_param.prcxml` ([STAGES.md](STAGES.md)), and spirit packs their four
+`spirit/` files ([SPIRITS.md](SPIRITS.md)).
 
 ## Params of your own
 
@@ -78,7 +79,7 @@ must be installed.
 top-level list, is set for your clone. Lists inside a group, hash40 values and
 text are left out, and `[params]` wins over the file. Ship your own `vl.prc`
 too and ARCropolis patches it with the file, every row included; the Clone
-Pack Workbench's Param files tab writes that copy when you change such a
+Pack Workbench's prcxml files tab writes that copy when you change such a
 value.
 
 Your articles read their own block: values under `param_<article>` (the

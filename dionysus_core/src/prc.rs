@@ -244,20 +244,19 @@ pub fn parse(bytes: &[u8]) -> Result<Param, PrcError> {
 struct Writer {
     hashes: Vec<u64>,
     hash_index: HashMap<u64, u32>,
-    entries: Vec<u8>,
-    strings: Vec<u8>,
+    refs: Vec<u8>,
+    tables: HashMap<Vec<u8>, u32>,
     string_index: HashMap<String, u32>,
-    entry_region: usize,
     params: Vec<u8>,
 }
 
-fn count_entries(param: &Param) -> usize {
+fn size(param: &Param) -> usize {
     match param {
-        Param::List(items) => items.iter().map(count_entries).sum(),
-        Param::Struct(fields) => {
-            fields.len() + fields.iter().map(|(_, value)| count_entries(value)).sum::<usize>()
-        }
-        _ => 0,
+        Param::Bool(_) | Param::I8(_) | Param::U8(_) => 2,
+        Param::I16(_) | Param::U16(_) => 3,
+        Param::I32(_) | Param::U32(_) | Param::Float(_) | Param::Hash(_) | Param::Str(_) => 5,
+        Param::List(items) => 5 + items.len() * 4 + items.iter().map(size).sum::<usize>(),
+        Param::Struct(fields) => 9 + fields.iter().map(|(_, value)| size(value)).sum::<usize>(),
     }
 }
 
@@ -276,10 +275,20 @@ impl Writer {
         if let Some(offset) = self.string_index.get(text) {
             return *offset;
         }
-        let offset = (self.entry_region + self.strings.len()) as u32;
-        self.strings.extend_from_slice(text.as_bytes());
-        self.strings.push(0);
+        let offset = self.refs.len() as u32;
+        self.refs.extend_from_slice(text.as_bytes());
+        self.refs.push(0);
         self.string_index.insert(text.to_string(), offset);
+        offset
+    }
+
+    fn table(&mut self, table: Vec<u8>) -> u32 {
+        if let Some(offset) = self.tables.get(&table) {
+            return *offset;
+        }
+        let offset = self.refs.len() as u32;
+        self.refs.extend_from_slice(&table);
+        self.tables.insert(table, offset);
         offset
     }
 
@@ -339,43 +348,44 @@ impl Writer {
                 }
             }
             Param::Struct(fields) => {
-                let slot = self.entries.len();
-                self.entries.resize(slot + fields.len() * 8, 0);
-                self.params.push(TAG_STRUCT);
-                self.put_u32(fields.len() as u32);
-                self.put_u32(slot as u32);
                 let mut placed = Vec::with_capacity(fields.len());
+                let mut offset = 9usize;
                 for (key, value) in fields {
-                    let offset = (self.params.len() - at) as u32;
-                    self.param(value);
-                    placed.push((*key, offset));
+                    placed.push((*key, offset as u32));
+                    offset += size(value);
                 }
                 placed.sort_by_key(|(key, _)| *key);
-                for (index, (key, offset)) in placed.into_iter().enumerate() {
+                let mut table = Vec::with_capacity(placed.len() * 8);
+                for (key, at_offset) in placed {
                     let hash = self.intern(key);
-                    let entry = slot + index * 8;
-                    self.entries[entry..entry + 4].copy_from_slice(&hash.to_le_bytes());
-                    self.entries[entry + 4..entry + 8].copy_from_slice(&offset.to_le_bytes());
+                    table.extend_from_slice(&hash.to_le_bytes());
+                    table.extend_from_slice(&at_offset.to_le_bytes());
                 }
+                let slot = self.table(table);
+                self.params.push(TAG_STRUCT);
+                self.put_u32(fields.len() as u32);
+                self.put_u32(slot);
+                for (_, value) in fields {
+                    self.param(value);
+                }
+                debug_assert_eq!(self.params.len() - at, offset);
             }
         }
     }
 }
 
 pub fn write(root: &Param) -> Vec<u8> {
-    let entry_region = count_entries(root) * 8;
     let mut writer = Writer {
         hashes: vec![0],
         hash_index: HashMap::from([(0, 0)]),
-        entries: Vec::with_capacity(entry_region),
-        strings: Vec::new(),
+        refs: Vec::new(),
+        tables: HashMap::new(),
         string_index: HashMap::new(),
-        entry_region,
-        params: Vec::new(),
+        params: Vec::with_capacity(size(root)),
     };
     writer.param(root);
     let hash_size = writer.hashes.len() * 8;
-    let ref_size = writer.entries.len() + writer.strings.len();
+    let ref_size = writer.refs.len();
     let mut out = Vec::with_capacity(0x10 + hash_size + ref_size + writer.params.len());
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&(hash_size as u32).to_le_bytes());
@@ -383,8 +393,7 @@ pub fn write(root: &Param) -> Vec<u8> {
     for hash in &writer.hashes {
         out.extend_from_slice(&hash.to_le_bytes());
     }
-    out.extend_from_slice(&writer.entries);
-    out.extend_from_slice(&writer.strings);
+    out.extend_from_slice(&writer.refs);
     out.extend_from_slice(&writer.params);
     out
 }
@@ -480,6 +489,20 @@ mod tests {
     }
 
     #[test]
+    fn rows_with_the_same_keys_share_one_key_table() {
+        let row = |speed: f32| {
+            let mut fields = vec![(hash40("speed"), Param::Float(speed)), (hash40("life"), Param::U8(3))];
+            fields.sort_by_key(|(key, _)| *key);
+            Param::Struct(fields)
+        };
+        let root = Param::Struct(vec![(hash40("rows"), Param::List((0..50).map(|i| row(i as f32)).collect()))]);
+        let bytes = write(&root);
+        let ref_size = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        assert_eq!(ref_size, 8 + 2 * 8);
+        assert_eq!(parse(&bytes).unwrap(), root);
+    }
+
+    #[test]
     fn refuses_what_is_not_a_param_file() {
         assert_eq!(parse(b"not a param file"), Err(PrcError::Magic));
         let mut bytes = write(&sample());
@@ -511,6 +534,7 @@ mod tests {
             let bytes = std::fs::read(file).unwrap();
             let root = parse(&bytes).unwrap();
             let again = write(&root);
+            eprintln!("{file}: {} bytes, rewritten {}", bytes.len(), again.len());
             assert_eq!(parse(&again).unwrap(), root, "{file}");
         }
     }

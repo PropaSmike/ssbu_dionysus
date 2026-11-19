@@ -486,7 +486,8 @@ pub extern "C" fn clone_engine_api_version() -> u32 {
 }
 
 fn compiled_capabilities() -> u64 {
-    let mut capabilities = dionysus_api::CAP_SHARED_HOOKS | dionysus_api::CAP_MII_PARTS;
+    let mut capabilities =
+        dionysus_api::CAP_SHARED_HOOKS | dionysus_api::CAP_MII_PARTS | dionysus_api::CAP_SPIRITS;
     #[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
     {
         capabilities |= dionysus_api::CAP_FIGHTER_IDENTITY
@@ -4935,6 +4936,7 @@ mod hud_layouts;
 #[cfg(feature = "css_slot")]
 mod move_list;
 mod mii_parts;
+mod spirits;
 #[cfg(feature = "css_slot")]
 mod boss_gauge;
 #[cfg(feature = "css_slot")]
@@ -5112,6 +5114,7 @@ pub fn main() {
     item_packs::load_all();
 
     mii_parts::load_all();
+    spirits::load_all();
 
     #[cfg(feature = "item_clone_backend")]
     enemy_packs::load_all();

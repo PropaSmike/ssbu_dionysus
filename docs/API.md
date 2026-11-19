@@ -884,6 +884,11 @@ A handler is `unsafe extern "C" fn(args: *const i64, count: usize) -> i64`.
 `mii.toml` only; see [Mii hats and outfits](wiki/MII_PARTS.md). Check
 `runtime_capabilities() & CAP_MII_PARTS`.
 
+## Spirits
+
+`spirit.toml` only, spirits and DLC spirit boards; see [Spirits](wiki/SPIRITS.md).
+Check `runtime_capabilities() & CAP_SPIRITS`.
+
 ## Battle HUD
 
 | Function | Meaning |

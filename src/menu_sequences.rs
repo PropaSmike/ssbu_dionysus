@@ -46,6 +46,16 @@ fn registry() -> &'static Mutex<Registry> {
     REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
 }
 
+pub(crate) fn add_pack_layout(path: &str) -> Result<(), menu::Refusal> {
+    let hash = menu::file(path).hash;
+    let Ok(mut registry) = registry().lock() else {
+        return Err(menu::Refusal::Full);
+    };
+    registry.add_main_menu_layout(hash)?;
+    registry.cover_side_panel(hash);
+    Ok(())
+}
+
 pub(crate) fn register(code: u32, runs_as: u32, scene: Option<u8>) -> Result<(), menu::Refusal> {
     let Ok(mut registry) = registry().lock() else {
         return Err(menu::Refusal::Full);

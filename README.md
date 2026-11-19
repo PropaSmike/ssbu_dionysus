@@ -177,6 +177,7 @@ are retired; the ones above show everything they did.
 - [Stages](docs/wiki/STAGES.md)
 - [Menus](docs/wiki/MENUS.md)
 - [Mii hats and outfits](docs/wiki/MII_PARTS.md)
+- [Spirits](docs/wiki/SPIRITS.md)
 - [API reference](docs/API.md), for packs with code
 - [Deprecated: the long form](docs/DEPRECATED.md), for packs written before `fighter.toml`
 
@@ -222,6 +223,9 @@ work, so please show them the respect they deserve.
 
 **Research**
 - [smash-vtables](https://github.com/theincredibleplayer/smash-vtables): theincredibleplayer
+
+**Tools**
+- [Spirit Board](https://gamebanana.com/tools/9621): made by Tougon, redistributed by Hinata; the Clone Pack Workbench imports its spirits
 
 ## License
 

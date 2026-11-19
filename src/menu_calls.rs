@@ -144,6 +144,7 @@ fn builtin(name: &str, args: &[i64]) -> Option<i64> {
     };
     match name {
         "engine.active_sequence" => Some(i64::from(crate::menu_sequences::active())),
+        "engine.spirit_board_count" => Some(crate::spirits::board_count()),
         "engine.battle_player" => Some(outcome(crate::menu_battle::set_player(
             arg(0) as u32,
             menu::named(arg(1), menu::PLAYER_TYPES) as u32,
@@ -291,7 +292,9 @@ unsafe extern "C" fn engine_text(state: usize) -> i32 {
             } else {
                 -1
             };
-            crate::menu_modes::text(&name, index).or_else(|| crate::menu_viewer::text(&name, index))
+            crate::menu_modes::text(&name, index)
+                .or_else(|| crate::menu_viewer::text(&name, index))
+                .or_else(|| crate::spirits::board_text(&name, index))
         })
     };
     match text.and_then(|text| CString::new(text).ok()) {
