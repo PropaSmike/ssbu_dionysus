@@ -34,7 +34,9 @@ own `param` folder:
 | `fighter/common/param/common.prc` | `fighter/<name>/param/common.prcxml` |
 
 `item.prcxml`, `etc.prcxml`, `power_up.prcxml`, `effect.prcxml` and
-`sound.prcxml` work the same way.
+`sound.prcxml` work the same way. The Clone Pack Workbench's Param files tab
+starts each of these files, and the item, enemy and stage ones below, as a copy
+of the game's own values.
 
 Write it as you would for the shared file. The row index does not matter:
 the row is always your clone's, so a file made for the base's row works as it
@@ -74,7 +76,10 @@ must be installed.
 `fighter/<name>/param/vl.prcxml` does the same with no code and no copy of
 `vl.prc`: every value under a top-level group, or under the first row of a
 top-level list, is set for your clone. Lists inside a group, hash40 values and
-text are left out, and `[params]` wins over the file.
+text are left out, and `[params]` wins over the file. Ship your own `vl.prc`
+too and ARCropolis patches it with the file, every row included; the Clone
+Pack Workbench's Param files tab writes that copy when you change such a
+value.
 
 Your articles read their own block: values under `param_<article>` (the
 base's article, `param_fireball`) or `param_<fighter>_<article>` (an article
