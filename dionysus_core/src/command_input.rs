@@ -229,7 +229,7 @@ impl Command {
         }
         if self.cpu > 0.0 && self.button == Button::None {
             return Err(format!(
-                "command {}: cpu needs a button, a computer player gets the command when it presses it",
+                "command {}: cpu needs a button, a CPU gets the command when it presses it",
                 self.name
             ));
         }
@@ -695,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn a_computer_player_gets_one_command_per_press_by_its_chance() {
+    fn a_cpu_gets_one_command_per_press_by_its_chance() {
         let commands = compiled(&[
             Command::new("geyser", "21416").button(Button::Special).cpu(0.25),
             Command::new("kick", "236").button(Button::Attack).cpu(0.5),

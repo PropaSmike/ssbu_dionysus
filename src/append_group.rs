@@ -220,11 +220,23 @@ pub(crate) unsafe fn request_append_group(context: usize, kind: i32) {
         &format!("fighter/{}/movie/c{color:02}", definition.base_resource_name),
     );
     let movie_flags = request(service, context, movie);
-    let donor_movie = crate::final_grafts::donor_of(kind)
-        .and_then(|donor| directory_at(service, &format!("fighter/{}/movie/c{color:02}", donor.name)));
-    let donor_movie_flags = request(service, context, donor_movie);
     let own = directory_named(service, definition.resource_name, color);
     let own_flags = request(service, context, own);
+    if let Some(name) = crate::cpu_ai::chosen(kind)
+        .and_then(crate::custom_articles::fighter_name)
+        .and_then(|name| name.to_str().ok())
+    {
+        let ai_group = directory_at(service, &format!("fighter/{name}/cmn/ai"));
+        let ai_flags = request(service, context, ai_group);
+        fiber_note(
+            b"[cpuai] AI group requested with the fighter",
+            &[
+                (b"kind", kind as u32 as u64),
+                (b"group", ai_group.map(|(index, _)| u64::from(index)).unwrap_or(u64::MAX)),
+                (b"flags", ai_flags),
+            ],
+        );
+    }
     if definition.base_kind != APPEND_OWNER_KIND {
         if let Some((index, _)) = own {
             if LOG.fetch_add(1, Ordering::Relaxed) < LOG_BUDGET {
@@ -239,7 +251,7 @@ pub(crate) unsafe fn request_append_group(context: usize, kind: i32) {
                 );
             }
         }
-        if (own_movie.is_some() || movie.is_some() || donor_movie.is_some())
+        if (own_movie.is_some() || movie.is_some())
             && LOG.fetch_add(1, Ordering::Relaxed) < LOG_BUDGET
         {
             fiber_note(
@@ -251,8 +263,6 @@ pub(crate) unsafe fn request_append_group(context: usize, kind: i32) {
                     (b"own_flags", own_movie_flags),
                     (b"group", movie.map(|(index, _)| u64::from(index)).unwrap_or(u64::MAX)),
                     (b"group_flags", movie_flags),
-                    (b"donor", donor_movie.map(|(index, _)| u64::from(index)).unwrap_or(u64::MAX)),
-                    (b"donor_flags", donor_movie_flags),
                 ],
             );
         }

@@ -324,7 +324,7 @@ unsafe fn area_lookup(ctx: &mut skyline::hooks::InlineCtx) {
     };
     if first_time(stage_id, 2) {
         crate::dbg_log_public(&format!(
-            "[stagerows] stage id {stage_id} gives computer players {} area",
+            "[stagerows] stage id {stage_id} gives CPUs {} area",
             source(own.is_some(), donor)
         ));
     }
@@ -348,7 +348,7 @@ pub(crate) fn install() {
         skyline::install_hooks!(area_lookup);
     }
     skyline::println!(
-        "[stagerows] cloned stages take their donor's reverb and sound settings {}, own reverb {}, computer player areas {}",
+        "[stagerows] cloned stages take their donor's reverb and sound settings {}, own reverb {}, CPU areas {}",
         if heads { "on" } else { "off (another instruction)" },
         if REVERB_READY.load(Ordering::Relaxed) { "on" } else { "off" },
         if area { "on" } else { "off (another instruction)" },

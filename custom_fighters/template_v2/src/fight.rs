@@ -23,7 +23,7 @@ pub fn commands(manifest: Manifest) -> Manifest {
         .command(
             Command::new(FIREBALL, "41236") // name, numpad input read for the way the fighter faces as it starts
                 .button(Button::Special)     // the button that ends it: Special, Attack, Either or None
-                .cpu(0.25),                  // a computer player's special press reads it 25% of the time
+                .cpu(0.25),                  // a CPU's special press reads it 25% of the time
         )
 }
 

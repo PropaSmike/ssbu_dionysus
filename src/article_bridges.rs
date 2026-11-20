@@ -2047,9 +2047,6 @@ pub(crate) unsafe fn handle_custom_base_module_name(
     if let Some(definition) = clone_definition(raw_kind) {
         ctx.registers[destination].set_x(definition.base_resource_name_cstr.as_ptr() as u64);
     } else if let Some(kind) = active_resource_kind() {
-        if crate::final_grafts::donor_of(kind).map(|donor| donor.kind) == Some(raw_kind) {
-            return;
-        }
         if let Some(definition) = clone_definition(kind) {
             ctx.registers[destination].set_x(definition.base_resource_name_cstr.as_ptr() as u64);
         }

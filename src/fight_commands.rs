@@ -104,7 +104,7 @@ pub(crate) fn register(kind: i32, settings: &Settings, commands: &[Command]) -> 
     let names: Vec<String> = commands
         .iter()
         .map(|command| match command.cpu {
-            chance if chance > 0.0 => format!("{} (computer players {:.0}%)", command.name, chance * 100.0),
+            chance if chance > 0.0 => format!("{} (CPUs {:.0}%)", command.name, chance * 100.0),
             _ => command.name.clone(),
         })
         .collect();
@@ -249,7 +249,7 @@ unsafe fn recognise(boma: *mut BattleObjectModuleAccessor, entry: &Registered, c
                 command.name,
                 command.input,
                 if lr * frame.facing >= 0.0 { "the way it faces" } else { "behind it" },
-                if frame.roll.is_some() { ", on a computer player's press" } else { "" }
+                if frame.roll.is_some() { ", on a CPU's press" } else { "" }
             ));
         }
     }

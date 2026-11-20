@@ -32,13 +32,11 @@ pub(crate) fn rebuild_with(
     original: &[u8],
     records: &[MotionRecord],
     has_animation: impl Fn(&str) -> bool,
-    graft: impl FnOnce(&mut dionysus_core::motion_list::MotionList, &dyn Fn(&str) -> bool) -> Option<String>,
-) -> Option<(Vec<u8>, Outcome, Option<String>)> {
+) -> Option<(Vec<u8>, Outcome)> {
     let mut list = parse(original).ok()?;
     let outcome = apply_global(&mut list, records, &has_animation);
-    let grafted = graft(&mut list, &has_animation);
     let bytes = serialize(&list).ok()?;
-    Some((bytes, outcome, grafted))
+    Some((bytes, outcome))
 }
 
 pub(crate) fn summary(directory: &str, sharers: &[String], outcome: &Outcome) -> String {
@@ -192,8 +190,7 @@ mod live {
             return false;
         };
         let entries = registered();
-        let grafted = crate::final_grafts::donor_for_motion_directory(&directory).is_some();
-        if entries.is_empty() && !grafted {
+        if entries.is_empty() {
             return false;
         }
         let mut original = vec![0u8; length];
@@ -208,9 +205,7 @@ mod live {
                 .iter()
                 .all(|sharer| arc_size(&format!("{sharer}/{file}")).is_some())
         };
-        let Some((rebuilt, outcome, final_smash)) = rebuild_with(&original, &entries, has_animation, |list, has| {
-            crate::final_grafts::graft_motion_list(&directory, list, has)
-        }) else {
+        let Some((rebuilt, outcome)) = rebuild_with(&original, &entries, has_animation) else {
             skyline::println!("[globalmotion] {directory}: the motion list did not parse; leaving it alone");
             return false;
         };
@@ -223,12 +218,7 @@ mod live {
         }
         unsafe { core::ptr::copy_nonoverlapping(rebuilt.as_ptr(), buffer, rebuilt.len()) };
         *out_size = rebuilt.len();
-        if !entries.is_empty() {
-            skyline::println!("{}", summary(&directory, &sharers, &outcome));
-        }
-        if let Some(final_smash) = final_smash {
-            crate::dbg_log_public(&format!("[finalsmash] {directory}: {final_smash}"));
-        }
+        skyline::println!("{}", summary(&directory, &sharers, &outcome));
         true
     }
 
@@ -263,7 +253,7 @@ mod live {
 
     fn owners() -> Vec<String> {
         if registered().is_empty() {
-            return crate::final_grafts::motion_owners();
+            return Vec::new();
         }
         let mut owners: Vec<String> = VANILLA_BODY_MOTION_OWNERS
             .iter()
@@ -282,7 +272,7 @@ mod live {
 
     pub(crate) fn install() {
         let count = registered().len();
-        if count == 0 && crate::final_grafts::motion_owners().is_empty() {
+        if count == 0 {
             return;
         }
         if decompressed_size().is_none() {

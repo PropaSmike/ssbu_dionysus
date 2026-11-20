@@ -88,6 +88,7 @@ are in [DEPRECATED.md](DEPRECATED.md#manifest-params).
 | `narration(label)` | Announcer call, `vc_narration_characall_<name>`. |
 | `staffroll()` | Serve `standard/staffroll/texture/standard_staffroll_<name>.nutexb` from the pack. |
 | `item_hand(hand)` | `"left"` or `"right"`: the hand that holds, throws and swings items. See [Item hand](wiki/FIGHTERS.md#item-hand). |
+| `cpu_ai(fighter)` | the fighter whose CPU AI yours uses, such as `"ryu"`. See [CPU AI](wiki/FIGHTERS.md#cpu-ai). |
 | `own_css()` | Do not publish the select entry; the pack's CSK code does, with `hash40("fighter_kind_<name>")` and `hash40("ui_chara_<name>")`. |
 | `jingle(name)` | Accepted, not served yet. |
 | `ui_chara(s)`, `fighter_kind_name(s)`, `resource_name(s)`, `base_resource_name(s)` | Override the names derived from `name` and `base`. |
@@ -211,7 +212,7 @@ With no plugin, drop `css = false` and add `series`, `disp_order`,
 
 | Key | `Manifest` method |
 |---|---|
-| `name`, `base`, `costumes`, `color_start`, `series`, `disp_order`, `save_no`, `exhibit_year`, `narration`, `staffroll`, `item_hand`, `jingle`, `ui_chara`, `fighter_kind_name`, `resource_name`, `base_resource_name` | Same name. |
+| `name`, `base`, `costumes`, `color_start`, `series`, `disp_order`, `save_no`, `exhibit_year`, `narration`, `staffroll`, `item_hand`, `cpu_ai`, `jingle`, `ui_chara`, `fighter_kind_name`, `resource_name`, `base_resource_name` | Same name. |
 | `display_name` | `name_label`. |
 | `css = false` | `own_css()`. |
 | `[[article]]` with `name`, `from` or `base_article`, `kirby = true` | `article`, `base_article`, `kirby_article`. |
@@ -250,7 +251,7 @@ Several fighters in one file: `[[fighter]]` blocks, with `[[fighter.article]]`,
 | `own_status(n)` | Status number `n` of your fighter's own, counted from 0 past the base's statuses. Call after `register`; -1 before. |
 | `set_vtable_entry(n, f)` | Write one vtable entry; returns the previous. |
 | `set_common_vtable_entry(n, f)`, `set_copy_common_vtable_entry(n, f, &ORIGINAL)` | [Common vtables](#common-vtables). |
-| `register(manifest)` | Above. A table the installed Dionysus cannot read (global motions, grabs, HUD, Final Smash, tether, move list, command inputs, partner and switch groups) is left out and logged; the rest registers. |
+| `register(manifest)` | Above. A table the installed Dionysus cannot read (global motions, grabs, HUD, tether, move list, command inputs, partner and switch groups) is left out and logged; the rest registers. |
 
 Compare fighters with `is` and `owns`; `utility::get_kind` answers the base.
 
@@ -475,12 +476,12 @@ same). Each returns `false` when the value is refused.
 | Call | Sets |
 |---|---|
 | `WAWA.param("name")` | a fighter's values, below |
-| `WAWA.cpu_param("name")`, `v2::cpu_param(kind, "name")` | its computer player's row ([below](#computer-players)) |
+| `WAWA.cpu_param("name")`, `v2::cpu_param(kind, "name")` | its CPU's row ([below](#cpus)) |
 | `ITEM.param("key")`, `v2::item_param(kind, "key")` | an item's params of its own |
 | `ITEM.common("field")`, `v2::item_common(kind, "field")` | its row of `item/common/param/param.prc` ([Items](#item)) |
 | `ITEM.owner_param("fighter", "field")`, `v2::item_owner_param(kind, "fighter", "field")` | its owner fighter's `vl.prc` values, for this item only |
 | `enemy::param(kind, "key")`, `enemy::common(kind, "field")` | an enemy's params of its own, its row of `enemy/common/common.prc` ([Enemies](#enemies)) |
-| `stage::param(place, "key")`, `stage::sound(place, "field")`, `stage::cpu_area(place, "edge")` | a stage's params of its own, its sound row, its computer player box ([Stages](#stages)) |
+| `stage::param(place, "key")`, `stage::sound(place, "field")`, `stage::cpu_area(place, "edge")` | a stage's params of its own, its sound row, its CPU box ([Stages](#stages)) |
 
 `.mul` scales the base's value; stages have none to scale.
 
@@ -587,9 +588,9 @@ param_special_hi.y_spd_air = 2.0      # costume 3 only; a vl.prc value, pushed t
 | `common` | a top-level field of `common.prc`, `item.prc`, `etc.prc`, `power_up.prc`, `effect.prc`, `sound.prc` | Lists inside them and the ~40 match-level fields (handicap, team attack, finish camera, area wind, `power_up_point_min`) stay global. |
 | `param_thrown` | holder: `offset`, `offset_f`, `offset_b`, `offset_hi`, `offset_lw`; victim: `held_offset`; each also `_x`, `_y`, `_z` | Whole vector: `mul` only. Component: `set` or `mul`. Every costume only. |
 
-### Computer players
+### CPUs
 
-A clone's computer player reads its base's row of
+A clone's CPU reads its base's row (or its `cpu_ai` fighter's) of
 `fighter/common/ai/param/fighter_param.prc` (recovery reach, attack ranges,
 Final Smash range) unless you give it values:
 

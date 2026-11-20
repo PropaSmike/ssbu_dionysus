@@ -475,7 +475,7 @@ input = "21416"        # numpad, read for the way you face
 button = "special"     # special, attack, either (the default) or none
 super = true           # waits super_special_command_life_max per direction
 reverse = true         # also read mirrored, like Terry's _R commands
-cpu = 0.3              # a computer player's special press reads it 30% of the time
+cpu = 0.3              # a CPU's special press reads it 30% of the time
 ```
 
 ```rust
@@ -507,7 +507,7 @@ if let Some(lr) = fight::command_lr(fighter, "geyser") {
   the way it was input for, `clear_command` uses it up. Up to 32 commands.
 - `lr` is the way the fighter faced at the first direction. A back input on
   the ground turns it around, so it may face the other way by the end.
-- Computer players enter the game's commands only on a Ryu, Ken or Terry
+- CPUs enter the game's commands only on a Ryu, Ken or Terry
   base. `cpu` gives them your command when they press its button (not with
   `button = "none"`); a press reads at most one command, in order.
 - On an older Dionysus, `register` leaves the command tables out and logs it;
@@ -670,6 +670,13 @@ fighter holds items in. The base keeps its own, in the same match too.
   refused. A skeleton of your own needs the bone.
 - The Workbench's Item hand box (Identity tab, fighter) shows the base's hand
   and each bone that changes.
+
+## CPU AI
+
+`cpu_ai = "ryu"` (`Manifest::cpu_ai`) makes a CPU fight with another
+fighter's AI instead of the base's. Any fighter with CPU AI works; see
+[PARAMETERS.md](PARAMETERS.md#your-own-parameter-files) for what it brings
+along.
 
 ## Voice
 

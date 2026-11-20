@@ -80,7 +80,12 @@ your `stageparam_<place>.stprm`, not your donor. Copy the donor's file to keep
 its rules, or set the two flags yourself. Stages that travel (Wuhu Island, Delfino Plaza, Skyloft) switch numbered
 `.stprm` files per section: keep the donor's set.
 
-Reverb, the sound settings and the box computer players weigh come from your
+To change a few values of a borrowed `.stprm` or `.stdat`, put a
+`stageparam_<place>.stprmxml` or `<donor>.stdatxml` next to it: Dionysus
+patches the donor's file for your stage only
+([PARAMETERS.md](PARAMETERS.md#patches-for-borrowed-files)).
+
+Reverb, the sound settings and the box CPUs weigh come from your
 donor's rows in `param/sound/stage_sound_settings.prc` and
 `fighter/common/ai/param/stage_param.prc`. Without `donor` (or with
 `stage_donor_tests = false`) a stage has no reverb, scale 1, offset 0 and no

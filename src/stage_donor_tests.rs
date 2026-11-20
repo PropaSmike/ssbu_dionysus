@@ -164,7 +164,7 @@ pub(crate) unsafe fn caller_is_fighter_script(lr: usize) -> bool {
             return *fighter;
         }
     }
-    let (base, end) = crate::final_grafts::module_range(lr);
+    let (base, end) = crate::game::module_range(lr);
     if base == 0 || end <= base {
         return false;
     }

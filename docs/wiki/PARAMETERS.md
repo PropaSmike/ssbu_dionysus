@@ -52,6 +52,27 @@ Items take `common_param.prcxml` ([ITEMS.md](ITEMS.md)), stages
 `stage_param.prcxml` ([STAGES.md](STAGES.md)), and spirit packs their four
 `spirit/` files ([SPIRITS.md](SPIRITS.md)).
 
+### Patches for borrowed files
+
+A clone often borrows files from its base through `share-to-vanilla` in
+`config.json`. ARCropolis cannot patch a borrowed file, so Dionysus applies
+a `.prcxml`, `.stprmxml` or `.stdatxml` (or `.prcx`, `.stprmx`, `.stdatx`)
+next to it: when the game reads the clone's file, it gets a copy patched
+the way ARCropolis would. Keep the share. For example
+`stage/<place>/normal/param/stageparam_<place>.stprmxml` changes a cloned
+stage's camera and blast lines and leaves the donor alone.
+
+This works in a clone's `param` folders (`fighter/<name>/param`,
+`fighter/<name>/ai/param`, an item's, enemy's or boss's `param`) and a
+stage's `normal` and `battle` `param` and `render` folders. Elsewhere, ship
+the whole file.
+
+The patch can sit in any enabled pack. The boot log lists each watched file
+(`[parampatch]`), and the first time the game reads one the log says which
+values were set. A file the clone ships whole is patched by ARCropolis as
+usual. A file the game never reads (a renamed `.stdat`, see
+[STAGES.md](STAGES.md)) is never patched.
+
 ## Params of your own
 
 Any key works, not only the game's: a new field in a group or a whole new
@@ -117,12 +138,21 @@ The camera and CPU parameter trees are all or nothing: set
 `owns_param_resources` only once the whole tree is in your folder; a partial
 tree crashes or loads forever.
 
-A computer player plays your fighter with its base's AI, whether or not the
+A CPU plays your fighter with its base's AI, whether or not the
 base is in the match. Its row of `fighter/common/ai/param/fighter_param.prc`
 (recovery reach, attack ranges, Final Smash range) is its base's unless you
 ship `fighter/<name>/ai/param/fighter_param.prcxml` (its first `base` row,
 whatever its index or `name_hash`; no ParamConfig needed) or set it with
-`cpu_param` ([API](../API.md#computer-players)).
+`cpu_param` ([API](../API.md#cpus)).
+
+`cpu_ai = "ryu"` in `fighter.toml` (`Manifest::cpu_ai`) gives it another
+fighter's AI instead: that fighter's AI code and attack lists, loaded with
+your fighter, and its row, with your prcxml and `cpu_param` changes on
+top. The AI picks moves from that fighter's frame data, so pick one that
+moves like yours. The AI of Donkey Kong, Zero Suit Samus, Rosalina,
+Bayonetta, Steve, Ryu and Ken also has code for their own gauges, partners
+or inputs, which finds nothing to use on another fighter. With `cpu_ai`,
+files under `fighter/<name>/ai/` are not read.
 
 ## What reaches what
 
@@ -135,7 +165,7 @@ whatever its index or `name_hash`; no ParamConfig needed) or set it with
 | keys of your own (new fields, new groups) | `[params]`, `vl.prcxml` |
 | keys of your own on items, enemies and stages | `param.prcxml`, `param` in code |
 | your articles' blocks (`param_<article>`) | `[params]`, `vl.prcxml`, your own `vl.prc` |
-| the computer player's row (`fighter/common/ai/param/fighter_param.prc`) | prcxml, `cpu_param` |
+| the CPU's row (`fighter/common/ai/param/fighter_param.prc`) | prcxml, `cpu_param` |
 | lists and arrays in `vl.prc` (`hit_data`, ...) | your own `vl.prc` |
 | lists in the common files, `battle_object.prc`, `spirits.prc` | cannot be changed per clone |
 

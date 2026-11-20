@@ -140,7 +140,7 @@ pub(crate) fn load_file(directory: &str, resource: &str, kind: i32) {
 }
 
 unsafe fn base_key(kind: i32) -> Option<u64> {
-    let base = crate::clone_base_of(kind)?;
+    let base = crate::cpu_ai::ai_kind(kind)?;
     if !(0..VANILLA_KINDS).contains(&base) {
         return None;
     }
@@ -282,7 +282,7 @@ fn steer(kind: Option<i32>) -> Option<i32> {
     if let Ok(mut logged) = LOGGED.lock() {
         if !logged.contains(&kind) {
             logged.push(kind);
-            skyline::println!("[cpurows] kind {kind}'s computer player reads its own row of fighter/common/ai/param/fighter_param.prc");
+            skyline::println!("[cpurows] kind {kind}'s CPU reads its own row of fighter/common/ai/param/fighter_param.prc");
         }
     }
     Some(kind)
@@ -364,14 +364,14 @@ pub(crate) fn install() {
         let observed = unsafe { crate::game::text_word(offset) };
         if observed != expected {
             skyline::println!(
-                "[cpurows] {offset:#x} holds {observed:#010x}, not {expected:#010x}; clones' computer players keep their base's row"
+                "[cpurows] {offset:#x} holds {observed:#010x}, not {expected:#010x}; clones' CPUs keep their base's row"
             );
             return;
         }
     }
     install_info_kind_sites();
     skyline::install_hooks!(cpu_param_parse, cpu_row_pointer, cpu_row_ai);
-    skyline::println!("[cpurows] clones can give their computer players their own row of fighter/common/ai/param/fighter_param.prc");
+    skyline::println!("[cpurows] clones can give their CPUs their own row of fighter/common/ai/param/fighter_param.prc");
 }
 
 #[no_mangle]

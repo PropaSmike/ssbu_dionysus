@@ -120,7 +120,6 @@ pub const CAP_STAGE_CSK: u64 = 1 << 15;
 pub const CAP_GLOBAL_MOTIONS: u64 = 1 << 16;
 pub const CAP_GRAB_RULES: u64 = 1 << 17;
 pub const CAP_HUD: u64 = 1 << 18;
-pub const CAP_FINAL_SMASH: u64 = 1 << 19;
 pub const CAP_TETHER: u64 = 1 << 20;
 pub const CAP_ENTRY_GROUPS: u64 = 1 << 21;
 pub const CAP_ANY_BASE_GROUPS: u64 = 1 << 22;
@@ -832,7 +831,6 @@ pub fn feature_capability(feature: manifest::Feature) -> u64 {
         Feature::GlobalMotions => CAP_GLOBAL_MOTIONS,
         Feature::Grabs => CAP_GRAB_RULES,
         Feature::Hud => CAP_HUD,
-        Feature::FinalSmash => CAP_FINAL_SMASH,
         Feature::Tether => CAP_TETHER,
         Feature::MoveList => CAP_MOVE_LIST_PAGES,
         Feature::Commands => CAP_COMMAND_INPUTS,

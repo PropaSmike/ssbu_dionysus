@@ -97,6 +97,7 @@ pub struct FighterDeclaration {
     pub narration: Option<String>,
     pub staffroll: bool,
     pub item_hand: Option<crate::item_hand::ItemHand>,
+    pub cpu_ai: Option<String>,
     pub own_css: bool,
     pub jingle: Option<String>,
     pub owns_param_resources: bool,
@@ -108,7 +109,6 @@ pub struct FighterDeclaration {
     pub grabs: Vec<GrabRule>,
     pub hud: Option<String>,
     pub hud_layout: Option<String>,
-    pub final_smash: Option<String>,
     pub tether: Option<crate::tether::Tether>,
     pub partner: Option<bool>,
     pub partner_with: Option<String>,
@@ -447,6 +447,16 @@ pub fn parse(text: &str) -> Result<FighterDeclaration, ParseError> {
                         error(line_number, "item_hand must be \"left\" or \"right\"")
                     })?);
                 }
+                "cpu_ai" => {
+                    let text = unquote(value, line_number)?;
+                    if !crate::cpu_ai::is_ai_owner(&text) {
+                        return Err(error(
+                            line_number,
+                            &format!("cpu_ai must name a fighter with CPU AI, such as \"ryu\"; {text:?} has none"),
+                        ));
+                    }
+                    declaration.cpu_ai = Some(text);
+                }
                 "partner" if value.starts_with('"') => {
                     declaration.partner_with = Some(unquote(value, line_number)?);
                     declaration.partner = Some(true);
@@ -574,9 +584,7 @@ pub fn parse(text: &str) -> Result<FighterDeclaration, ParseError> {
             },
             Section::Final => match key {
                 "from" => {
-                    let donor = unquote(value, line_number)?;
-                    crate::final_smash::check(&donor).map_err(|message| error(line_number, message))?;
-                    declaration.final_smash = Some(donor);
+                    unquote(value, line_number)?;
                 }
                 _ => return Err(error(line_number, format!("unknown final key {key}"))),
             },
@@ -1237,6 +1245,15 @@ scale = 0.95
     }
 
     #[test]
+    fn cpu_ai_names_a_fighter_with_a_cpu() {
+        let fighter = parse("name = \"wawa\"\nbase = \"luigi\"\ncpu_ai = \"ryu\"\n").unwrap();
+        assert_eq!(fighter.cpu_ai.as_deref(), Some("ryu"));
+        assert_eq!(parse("name = \"wawa\"\nbase = \"luigi\"\n").unwrap().cpu_ai, None);
+        let failure = parse("name = \"wawa\"\nbase = \"luigi\"\ncpu_ai = \"ptrainer\"\n").unwrap_err();
+        assert!(failure.message.contains("ptrainer"));
+    }
+
+    #[test]
     fn item_hand_takes_left_or_right() {
         let fighter = parse("name = \"wawa\"\nbase = \"luigi\"\nitem_hand = \"left\"\n").unwrap();
         assert_eq!(fighter.item_hand, Some(crate::item_hand::ItemHand::Left));
@@ -1504,14 +1521,10 @@ switch = [\"wawab\"]
     }
 
     #[test]
-    fn a_final_smash_names_a_donor_with_nothing_left_to_build() {
+    fn an_old_final_table_still_reads_and_is_left_unused() {
         let head = "name = \"wawa\"\nbase = \"donkey\"\n";
-        let marth = parse(&format!("{head}[final]\nfrom = \"marth\"\n")).unwrap();
-        assert_eq!(marth.final_smash.as_deref(), Some("marth"));
-        assert_eq!(parse(head).unwrap().final_smash, None);
-        let joker = parse(&format!("{head}[final]\nfrom = \"jack\"\n")).unwrap_err();
-        assert_eq!(joker.line, 4);
-        assert!(joker.message.contains("cannot borrow yet"), "{}", joker.message);
+        let old = parse(&format!("{head}[final]\nfrom = \"marth\"\n")).unwrap();
+        assert_eq!(old, parse(head).unwrap());
         let stray = parse(&format!("{head}[final]\ndonor = \"marth\"\n")).unwrap_err();
         assert!(stray.message.contains("unknown final key donor"), "{}", stray.message);
     }

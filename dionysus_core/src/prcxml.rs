@@ -2,6 +2,7 @@ use crate::fighter_common_copies;
 use crate::fighter_param_row::{field_in, Field, FieldType, Table};
 use crate::fighter_toml::ParamValue;
 use crate::hash::hash40;
+use crate::prc::Param;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -239,18 +240,48 @@ impl<'a> Reader<'a> {
         Ok((tag, node))
     }
 
-    fn scalar(&self, tag: &str, text: &str) -> Option<Value> {
-        let integer = |text: &str| -> Option<i64> {
-            let (negative, digits) = match text.strip_prefix('-') {
-                Some(digits) => (true, digits),
-                None => (false, text),
-            };
-            let value = match digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X")) {
-                Some(hex) => i64::from_str_radix(hex, 16).ok()?,
-                None => digits.parse::<i64>().ok()?,
-            };
-            Some(if negative { -value } else { value })
+    fn param(&mut self, depth: usize) -> Result<(Tag, Param), Error> {
+        if depth > crate::prc::MAX_DEPTH {
+            return self.fail("the file nests too deep");
+        }
+        let tag = self.open()?;
+        let param = match tag.name.as_str() {
+            "struct" => {
+                let mut members = Vec::new();
+                if !tag.empty {
+                    while !self.closing_next()? {
+                        let (child, param) = self.param(depth + 1)?;
+                        let Some(hash) = child.attribute("hash") else {
+                            return self.fail(format!("a <{}> inside a struct has no hash", child.name));
+                        };
+                        members.push((key(hash), param));
+                    }
+                    self.close("struct")?;
+                }
+                Param::Struct(members)
+            }
+            "list" => {
+                let mut entries = Vec::new();
+                if !tag.empty {
+                    while !self.closing_next()? {
+                        entries.push(self.param(depth + 1)?.1);
+                    }
+                    self.close("list")?;
+                }
+                Param::List(entries)
+            }
+            scalar => {
+                let text = if tag.empty { String::new() } else { self.text_until_close(scalar)? };
+                match typed_scalar(scalar, &text) {
+                    Some(param) => param,
+                    None => return self.fail(format!("<{scalar}> cannot hold {text:?}")),
+                }
+            }
         };
+        Ok((tag, param))
+    }
+
+    fn scalar(&self, tag: &str, text: &str) -> Option<Value> {
         match tag {
             "bool" => match text.to_ascii_lowercase().as_str() {
                 "true" | "1" => Some(Value::Bool(true)),
@@ -264,6 +295,53 @@ impl<'a> Reader<'a> {
             _ => None,
         }
     }
+}
+
+fn integer(text: &str) -> Option<i64> {
+    let (negative, digits) = match text.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, text),
+    };
+    let value = match digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X")) {
+        Some(hex) => i64::from_str_radix(hex, 16).ok()?,
+        None => digits.parse::<i64>().ok()?,
+    };
+    Some(if negative { -value } else { value })
+}
+
+fn typed_scalar(tag: &str, text: &str) -> Option<Param> {
+    Some(match tag {
+        "bool" => match text.to_ascii_lowercase().as_str() {
+            "true" | "1" => Param::Bool(true),
+            "false" | "0" => Param::Bool(false),
+            _ => return None,
+        },
+        "sbyte" => Param::I8(i8::try_from(integer(text)?).ok()?),
+        "byte" => Param::U8(u8::try_from(integer(text)?).ok()?),
+        "short" => Param::I16(i16::try_from(integer(text)?).ok()?),
+        "ushort" => Param::U16(u16::try_from(integer(text)?).ok()?),
+        "int" => Param::I32(i32::try_from(integer(text)?).ok()?),
+        "uint" => Param::U32(u32::try_from(integer(text)?).ok()?),
+        "float" => Param::Float(text.parse::<f32>().ok().filter(|value| value.is_finite())?),
+        "hash40" if !text.is_empty() => Param::Hash(key(text)),
+        "string" => Param::Str(text.to_string()),
+        _ => return None,
+    })
+}
+
+pub fn parse_param(text: &str) -> Result<Param, Error> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut reader = Reader { text, at: 0 };
+    reader.skip_misc()?;
+    let (tag, param) = reader.param(0)?;
+    if tag.name != "struct" {
+        return reader.fail("the file must start with <struct>");
+    }
+    reader.skip_misc()?;
+    if !reader.rest().is_empty() {
+        return reader.fail("text after the closing </struct>");
+    }
+    Ok(param)
 }
 
 pub fn parse(text: &str) -> Result<Node, Error> {

@@ -143,6 +143,8 @@ mod menu_scripts;
 mod menu_sequences;
 mod mod_folders;
 mod param_files;
+mod param_patches;
+mod cpu_ai;
 #[cfg(feature = "css_slot")]
 mod menu_backdrop;
 #[cfg(feature = "css_slot")]
@@ -525,7 +527,6 @@ fn compiled_capabilities() -> u64 {
         capabilities |= dionysus_api::CAP_GLOBAL_MOTIONS
             | dionysus_api::CAP_GRAB_RULES
             | dionysus_api::CAP_HUD
-            | dionysus_api::CAP_FINAL_SMASH
             | dionysus_api::CAP_TETHER
             | dionysus_api::CAP_ENTRY_GROUPS
             | dionysus_api::CAP_ANY_BASE_GROUPS
@@ -1910,16 +1911,10 @@ macro_rules! clone_fighter_acmd_hooks {
             #[skyline::hook(offset = crate::game::rel($offset))]
             unsafe fn $name(object: u64, boma: u64, lua_state: u64) -> u64 {
                 let clone_kind = clone_kind_of_object(object);
-                let agent = {
-                    let _pending =
-                        clone_kind.map(|kind| PENDING_AGENT_KIND.enter(current_thread_key(), kind));
-                    let _agent_name = smashline_names::hold_clone_fighter_name(clone_kind);
-                    call_original!(object, boma, lua_state)
-                };
-                if let Some(kind) = clone_kind {
-                    final_grafts::on_acmd_agent($category, object, boma, lua_state, agent, kind);
-                }
-                agent
+                let _pending =
+                    clone_kind.map(|kind| PENDING_AGENT_KIND.enter(current_thread_key(), kind));
+                let _agent_name = smashline_names::hold_clone_fighter_name(clone_kind);
+                call_original!(object, boma, lua_state)
             }
         )*
 
@@ -2106,7 +2101,6 @@ unsafe fn clone_fighter_status_create(object: u64, boma: u64, lua_state: u64) ->
         core::ptr::write_volatile(kind_field, kind);
     }
     common_vtables::on_fighter_agent(object, result);
-    final_grafts::on_status_agent(object, boma, lua_state, result, status_clone_kind);
     tether::on_status_agent(boma, status_clone_kind);
     item_hand::on_status_agent(boma, status_clone_kind);
     result
@@ -2333,7 +2327,7 @@ fn record_param_config_text() {
         ));
         return;
     }
-    let (start, end) = unsafe { final_grafts::module_range(address) };
+    let (start, end) = unsafe { crate::game::module_range(address) };
     if start == 0 {
         return;
     }
@@ -4113,7 +4107,7 @@ static AI_KIND_REMAP_COUNT: core::sync::atomic::AtomicU32 = core::sync::atomic::
 
 unsafe fn remap_fighter_ai_kind(ctx: &mut skyline::hooks::InlineCtx, phase: &str) {
     let kind = ctx.registers[8].x() as i32;
-    let base = clone_base(kind);
+    let base = cpu_ai::ai_kind(kind);
     if let Some(base) = base {
         ctx.registers[8].set_x(base as u64);
     }
@@ -4136,12 +4130,18 @@ unsafe fn fighter_ai_setup_hook(ai: *mut u8, path: *const u8) -> u64 {
         let kind = core::ptr::read_volatile(field);
         #[cfg(feature = "css_slot")]
         cpu_rows::note_ai(ai as usize, clone_base(kind).map(|_| kind));
-        if let Some(base) = clone_base(kind) {
-            core::ptr::write_volatile(field, base);
+        if let Some(ai_kind) = cpu_ai::setup_kind(kind) {
+            core::ptr::write_volatile(field, ai_kind);
             if AI_SETUP_LOGGED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 16 {
-                skyline::println!(
-                    "[clone_engine] kind {kind}'s computer player loads and reads the AI data of its base {base}"
-                );
+                if Some(ai_kind) != clone_base(kind) {
+                    skyline::println!(
+                        "[clone_engine] kind {kind}'s CPU loads and reads the AI data of kind {ai_kind} (cpu_ai)"
+                    );
+                } else {
+                    skyline::println!(
+                        "[clone_engine] kind {kind}'s CPU loads and reads the AI data of its base {ai_kind}"
+                    );
+                }
             }
         }
     }
@@ -4164,7 +4164,7 @@ static AI_DATA_KIND_REMAP_COUNT: core::sync::atomic::AtomicU32 =
 
 unsafe fn remap_ai_data_kind(ctx: &mut skyline::hooks::InlineCtx, register: usize, phase: &str) {
     let kind = ctx.registers[register].x() as i32;
-    let base = clone_base(kind);
+    let base = cpu_ai::ai_kind(kind);
     if let Some(base) = base {
         ctx.registers[register].set_x(base as u64);
     }
@@ -4942,7 +4942,6 @@ mod boss_gauge;
 #[cfg(feature = "css_slot")]
 mod fighter_change;
 #[cfg(feature = "css_slot")]
-mod final_grafts;
 #[cfg(feature = "css_slot")]
 mod tether;
 #[cfg(feature = "css_slot")]
@@ -5088,7 +5087,6 @@ pub fn main() {
     #[cfg(feature = "css_slot")]
     fighter_change::install();
     #[cfg(feature = "css_slot")]
-    final_grafts::install_hooks();
     #[cfg(feature = "css_slot")]
     tether::install();
     #[cfg(feature = "css_slot")]
@@ -5115,6 +5113,7 @@ pub fn main() {
 
     mii_parts::load_all();
     spirits::load_all();
+    param_patches::load_all();
 
     #[cfg(feature = "item_clone_backend")]
     enemy_packs::load_all();

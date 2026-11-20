@@ -416,19 +416,10 @@ unsafe fn tree_exists(service: usize, name: &str) -> bool {
         && directory_index_for(service, crate::hash40::hash40(&tree_path(name))).is_some()
 }
 
-unsafe fn redirected_tree(clone_kind: i32) -> Option<(String, Option<i32>, &'static str)> {
+unsafe fn redirected_tree(clone_kind: i32) -> Option<String> {
     let definition = crate::clone_definition(clone_kind)?;
     let service = resource_service();
-    let donor = crate::final_grafts::donor_of(clone_kind);
-    if tree_exists(service, definition.resource_name) {
-        return Some((
-            tree_path(definition.resource_name),
-            donor.filter(|donor| owner_has_finalsmash(donor.kind)).map(|donor| donor.kind),
-            "its own",
-        ));
-    }
-    let donor = donor.filter(|donor| owner_has_finalsmash(donor.kind) && tree_exists(service, donor.name))?;
-    Some((tree_path(donor.name), Some(donor.kind), donor.name))
+    tree_exists(service, definition.resource_name).then(|| tree_path(definition.resource_name))
 }
 
 pub(crate) unsafe fn scene_gate_answer(kind: i32, return_address: usize) -> Option<bool> {
@@ -462,7 +453,7 @@ unsafe fn finalsmash_path_ready(ctx: &mut skyline::hooks::InlineCtx) {
     let Some(clone_kind) = crate::clone_kind_of_object(object) else {
         return;
     };
-    let Some((path, kind, whose)) = redirected_tree(clone_kind) else {
+    let Some(path) = redirected_tree(clone_kind) else {
         return;
     };
     let buffer = (ctx.sp.x() as usize + PATH_BUFFER) as *mut u8;
@@ -481,18 +472,12 @@ unsafe fn finalsmash_path_ready(ctx: &mut skyline::hooks::InlineCtx) {
         core::ptr::write_volatile(buffer.add(at), byte);
     }
     ctx.registers[FIRST_BYTE_REGISTER].set_x(path.as_bytes()[0] as u64);
-    let registered = match kind {
-        Some(kind) => {
-            ctx.registers[KIND_REGISTER].set_x(kind as u32 as u64);
-            kind
-        }
-        None => ctx.registers[KIND_REGISTER].x() as u32 as i32,
-    };
+    let registered = ctx.registers[KIND_REGISTER].x() as u32 as i32;
     REDIRECTED_OBJECT.store(object as usize, Ordering::SeqCst);
     remember_registration(clone_kind, registered);
     if REDIRECT_LOG.fetch_add(1, Ordering::Relaxed) < REDIRECT_LOG_BUDGET {
         crate::dbg_log_public(&format!(
-            "[fsload] clone kind {clone_kind} builds {whose} Final Smash background from {path}, started by start_finalbg with kind {registered}"
+            "[fsload] clone kind {clone_kind} builds its own Final Smash background from {path}, started by start_finalbg with kind {registered}"
         ));
     }
 }
@@ -563,18 +548,14 @@ unsafe fn substitute_directory_for_preload() -> Option<u32> {
     let Some(definition) = crate::clone_definition(kind) else {
         return None;
     };
-    let donor = crate::final_grafts::donor_of(kind).filter(|donor| owner_has_finalsmash(donor.kind));
-    let (owner, owner_name) = match donor {
-        Some(donor) => (donor.kind, donor.name),
-        None if owner_has_finalsmash(definition.base_kind) => {
-            let bytes = definition.base_resource_name_cstr;
-            let Ok(name) = core::str::from_utf8(bytes.split(|byte| *byte == 0).next().unwrap_or(&[])) else {
-                return None;
-            };
-            (definition.base_kind, name)
-        }
-        None => return None,
+    if !owner_has_finalsmash(definition.base_kind) {
+        return None;
+    }
+    let bytes = definition.base_resource_name_cstr;
+    let Ok(owner_name) = core::str::from_utf8(bytes.split(|byte| *byte == 0).next().unwrap_or(&[])) else {
+        return None;
     };
+    let owner = definition.base_kind;
 
     let service = resource_service();
     let resolved = (service >= LOWEST_PLAUSIBLE_POINTER)

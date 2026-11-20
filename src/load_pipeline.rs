@@ -159,6 +159,7 @@ pub(crate) static KIRBY_COPY_SOUND_LOG: core::sync::atomic::AtomicU32 =
 
 #[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
 pub(crate) const KIRBY_COPY_SOUND_PATH_TYPES: [i32; 3] = [32, 33, 34];
+const AI_RESOURCE_PATH_TYPE: i32 = 19;
 
 #[cfg(all(
     feature = "clone_runtime",
@@ -599,6 +600,13 @@ pub(crate) unsafe fn fighter_scoped_resource_path_hook(
         }
     }
     let entry = entry_for_resource_record(record as usize);
+    if path_type == AI_RESOURCE_PATH_TYPE {
+        let entry_clone = entry.and_then(|entry| entry_custom_kind(entry as u8));
+        if let Some(ai_kind) = crate::cpu_ai::path_kind(kind, entry_clone) {
+            call_original!(out, record, ai_kind, path_type);
+            return;
+        }
+    }
     let kind = match clone_definition(kind).filter(|definition| definition.kind == kind) {
         Some(definition) => {
             if CLONE_KIND_PATH_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 8 {
@@ -1485,7 +1493,7 @@ pub(crate) unsafe fn load_final_register_call_hook(ctx: &mut skyline::hooks::Inl
                 );
             }
             crate::append_group::request_append_group(load_obj as usize, kind as i32);
-            crate::final_grafts::request_donor(load_obj as usize, kind as i32);
+            crate::cpu_ai::request_module(kind as i32);
         }
 
         #[cfg(not(feature = "css_slot"))]

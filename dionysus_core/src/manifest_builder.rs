@@ -199,7 +199,6 @@ pub enum Feature {
     GlobalMotions,
     Grabs,
     Hud,
-    FinalSmash,
     Tether,
     MoveList,
     Commands,
@@ -208,11 +207,10 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Feature; 9] = [
+    pub const ALL: [Feature; 8] = [
         Feature::GlobalMotions,
         Feature::Grabs,
         Feature::Hud,
-        Feature::FinalSmash,
         Feature::Tether,
         Feature::MoveList,
         Feature::Commands,
@@ -225,7 +223,6 @@ impl Feature {
             Feature::GlobalMotions => "global motions",
             Feature::Grabs => "command grabs",
             Feature::Hud => "the HUD",
-            Feature::FinalSmash => "the borrowed Final Smash",
             Feature::Tether => "the tether",
             Feature::MoveList => "move list pages",
             Feature::Commands => "command inputs",
@@ -240,7 +237,6 @@ impl Feature {
             "global_motion" => Some(Feature::GlobalMotions),
             "grab" => Some(Feature::Grabs),
             "hud" => Some(Feature::Hud),
-            "final" => Some(Feature::FinalSmash),
             "tether" => Some(Feature::Tether),
             "move_list" => Some(Feature::MoveList),
             "commands" | "command" => Some(Feature::Commands),
@@ -281,7 +277,6 @@ pub struct Manifest {
     grabs: Vec<Grab>,
     hud: Option<String>,
     hud_layout: Option<String>,
-    final_smash: Option<String>,
     tether: Option<crate::tether::Tether>,
     move_list: Option<crate::move_list::MoveList>,
     params: Vec<(Option<u32>, bool, String, String)>,
@@ -312,7 +307,6 @@ impl Manifest {
             grabs: Vec::new(),
             hud: None,
             hud_layout: None,
-            final_smash: None,
             tether: None,
             move_list: None,
             params: Vec::new(),
@@ -377,6 +371,10 @@ impl Manifest {
         self.text("item_hand", hand)
     }
 
+    pub fn cpu_ai(self, fighter: &str) -> Self {
+        self.text("cpu_ai", fighter)
+    }
+
     fn entry_line(mut self, line: String, any_base: bool) -> Self {
         self.entry.push(line);
         if any_base {
@@ -417,9 +415,6 @@ impl Manifest {
         }
         if self.hud.is_some() || self.hud_layout.is_some() {
             add(Feature::Hud);
-        }
-        if self.final_smash.is_some() {
-            add(Feature::FinalSmash);
         }
         if self.tether.is_some() {
             add(Feature::Tether);
@@ -579,11 +574,6 @@ impl Manifest {
 
     pub fn hud_layout(mut self, path: &str) -> Self {
         self.hud_layout = Some(path.to_string());
-        self
-    }
-
-    pub fn final_smash(mut self, donor: &str) -> Self {
-        self.final_smash = Some(donor.to_string());
         self
     }
 
@@ -821,9 +811,6 @@ impl Manifest {
         }
         if let Some(path) = self.hud_layout.as_ref().filter(|_| hud) {
             out.push_str(&format!("layout = {}\n", quoted(path)));
-        }
-        if let Some(donor) = self.final_smash.as_ref().filter(|_| keep(Feature::FinalSmash)) {
-            out.push_str(&format!("\n[final]\nfrom = {}\n", quoted(donor)));
         }
         if let Some(tether) = self.tether.as_ref().filter(|_| keep(Feature::Tether)) {
             out.push_str("\n[tether]\n");
@@ -1169,6 +1156,14 @@ mod tests {
     }
 
     #[test]
+    fn cpu_ai_renders_and_parses_back() {
+        let text = Manifest::new("wawa", "luigi").cpu_ai("ryu").to_toml();
+        assert!(text.contains("cpu_ai = \"ryu\"\n"));
+        let fighter = &crate::fighter_toml::parse_all(&text).unwrap()[0];
+        assert_eq!(fighter.cpu_ai.as_deref(), Some("ryu"));
+    }
+
+    #[test]
     fn item_hand_renders_and_parses_back() {
         let text = Manifest::new("wawa", "luigi").item_hand("left").to_toml();
         assert!(text.contains("item_hand = \"left\"\n"));
@@ -1382,18 +1377,6 @@ mod tests {
         let fighter = &crate::fighter_toml::parse_all(&text).unwrap()[0];
         assert_eq!(fighter.partner_params[1].offset, 0x13c);
         assert_eq!(fighter.partner_params[1].bits, 40.0f32.to_bits());
-    }
-
-    #[test]
-    fn a_final_smash_renders_its_own_table_and_parses_back() {
-        let text = Manifest::new("wawa", "donkey")
-            .hud("cloud")
-            .final_smash("marth")
-            .to_toml();
-        assert!(text.contains("\n[final]\nfrom = \"marth\"\n"), "{text}");
-        let fighters = crate::fighter_toml::parse_all(&text).unwrap();
-        assert_eq!(fighters[0].final_smash.as_deref(), Some("marth"));
-        assert_eq!(fighters[0].hud.as_deref(), Some("cloud"));
     }
 
     #[test]

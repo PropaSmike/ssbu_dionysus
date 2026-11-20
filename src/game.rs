@@ -286,6 +286,24 @@ pub(crate) fn opcode(offset: usize, opcode: u32) -> u32 {
     }
 }
 
+const NRO_MAGIC: u32 = 0x304F_524E;
+const NRO_MAGIC_AT: usize = 0x10;
+const NRO_SIZE_AT: usize = 0x18;
+const MODULE_PAGE: usize = 0x1000;
+const MAX_MODULE_PAGES: usize = 0x2000;
+
+pub(crate) unsafe fn module_range(address: usize) -> (usize, usize) {
+    let mut page = address & !(MODULE_PAGE - 1);
+    for _ in 0..MAX_MODULE_PAGES {
+        if core::ptr::read_volatile((page + NRO_MAGIC_AT) as *const u32) == NRO_MAGIC {
+            let size = core::ptr::read_volatile((page + NRO_SIZE_AT) as *const u32) as usize;
+            return (page, page + size);
+        }
+        page -= MODULE_PAGE;
+    }
+    (0, 0)
+}
+
 pub(crate) unsafe fn text_word(offset: usize) -> u32 {
     let word = core::ptr::read_volatile(addr(offset) as *const u32);
     match version() {

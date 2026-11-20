@@ -339,19 +339,6 @@ mod live {
                 ),
             }
         }
-        if let Some(donor) = &declaration.final_smash {
-            match crate::final_grafts::register(kind, donor) {
-                Ok(_) => {
-                    skyline::println!("[fighterpack] {directory}: {name} borrows {donor}'s Final Smash");
-                    if crate::mount_events::mounted() {
-                        crate::global_motions::install();
-                    }
-                }
-                Err(message) => skyline::println!(
-                    "[fighterpack] {directory}: {name} final smash REFUSED: {message}"
-                ),
-            }
-        }
         if let Some(tether) = &declaration.tether {
             match crate::tether::register(kind, tether) {
                 Ok(boxes) => skyline::println!(
@@ -371,6 +358,22 @@ mod live {
                 ),
                 Err(message) => skyline::println!(
                     "[fighterpack] {directory}: {name} item_hand REFUSED: {message}"
+                ),
+            }
+        }
+        if let Some(fighter) = &declaration.cpu_ai {
+            match crate::cpu_ai::register(kind, &declaration.base, fighter) {
+                Ok(Some(_)) if dionysus_core::cpu_ai::has_own_logic(fighter) => skyline::println!(
+                    "[fighterpack] {directory}: {name}'s CPU uses {fighter}'s AI; the parts of it made for {fighter}'s own gauges, partners or inputs find nothing to use"
+                ),
+                Ok(Some(_)) => skyline::println!(
+                    "[fighterpack] {directory}: {name}'s CPU uses {fighter}'s AI"
+                ),
+                Ok(None) => skyline::println!(
+                    "[fighterpack] {directory}: {name}'s cpu_ai is its base {fighter}, which it uses anyway"
+                ),
+                Err(message) => skyline::println!(
+                    "[fighterpack] {directory}: {name} cpu_ai REFUSED: {message}"
                 ),
             }
         }

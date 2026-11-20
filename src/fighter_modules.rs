@@ -239,6 +239,44 @@ pub fn search_path_index(path: &str) -> u32 {
     }
 }
 
+pub fn file_path_index(path: &str) -> Option<u32> {
+    let mut owned = path.as_bytes().to_vec();
+    owned.push(0);
+    unsafe {
+        let mut search_path = 0u32;
+        get_search_path_index(&mut search_path, owned.as_ptr());
+        Some(get_file_path_from_search_path(search_path)).filter(|index| *index != 0xFFFFFF)
+    }
+}
+
+pub fn data_ready(file_path: u32) -> bool {
+    unsafe {
+        let service = filesystem() as usize;
+        if service == 0 {
+            return false;
+        }
+        let paths = core::ptr::read_volatile((service + 0x8) as *const usize);
+        let path_count = core::ptr::read_volatile((service + 0x18) as *const u32);
+        if paths == 0 || file_path >= path_count {
+            return false;
+        }
+        let entry = paths + file_path as usize * 8;
+        let data_index = core::ptr::read_volatile(entry as *const u32);
+        if core::ptr::read_volatile((entry + 4) as *const u8) == 0 || data_index == 0xFFFFFF {
+            return false;
+        }
+        let datas = core::ptr::read_volatile((service + 0x10) as *const usize);
+        let data_count = core::ptr::read_volatile((service + 0x1c) as *const u32);
+        if datas == 0 || data_index >= data_count {
+            return false;
+        }
+        let data = datas + data_index as usize * 0x18;
+        core::ptr::read_volatile(data as *const usize) != 0
+            && core::ptr::read_volatile((data + 0xc) as *const u8) != 0
+            && core::ptr::read_volatile((data + 0xd) as *const u8) == 3
+    }
+}
+
 pub fn path_exists(path: &str) -> bool {
     let mut owned = path.as_bytes().to_vec();
     owned.push(0);
