@@ -603,6 +603,10 @@ WAWA.cpu_param("jump_sp_u_c0").int(0);                  // an on/off field: 0 or
 v2::cpu_param(kind, "range_long").set(45.0);            // by kind, for a fighter registered by fighter.toml
 ```
 
+Its own `fighter/<name>/ai/param/attack_list_param.prc` and
+`attack_data_param.prc` (or prcxml of them) replace the attack list and data
+for its CPU only. See [CPU AI](wiki/FIGHTERS.md#cpu-ai).
+
 Each returns `false` when the kind is unknown or the field is not one the row
 can take. Or ship `fighter/<name>/ai/param/fighter_param.prcxml`: its first
 `base` row, whatever its index or `name_hash`. Code sets over the file.

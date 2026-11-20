@@ -678,6 +678,63 @@ fighter's AI instead of the base's. Any fighter with CPU AI works; see
 [PARAMETERS.md](PARAMETERS.md#your-own-parameter-files) for what it brings
 along.
 
+Its own attack list and attack data:
+
+- Ship `fighter/<your name>/ai/param/attack_list_param.prc` and
+  `attack_data_param.prc`, or a prcxml of either. The Workbench's
+  **CPU attack list** and **CPU attack data** start from the AI fighter's
+  (`cpu_ai`, else the base).
+- The CPU plays from them with the base's AI code, or the `cpu_ai`
+  fighter's. The base and that fighter keep their own in the same match.
+- Both files must be in every costume group. The Workbench and
+  `make_clone_pack.py` list them and share the one you do not ship from the
+  AI fighter's.
+
+The attack list has 46 rows, the same slots for every fighter:
+
+| Rows | Move |
+|---|---|
+| 0 | jab |
+| 1, 2, 3 | forward, up, down tilt |
+| 4, 5, 6 | forward, up, down smash |
+| 7, 8, 9, 10 | neutral, side, up, down special |
+| 11 | grab |
+| 12 | unused |
+| 13 to 17 | neutral, forward, back, up, down air |
+| 18 to 21 | air neutral, side, up, down special |
+| 22 to 25 | set 1: neutral, side, up, down special |
+| 26 to 29 | set 1: air neutral, side, up, down special |
+| 30 to 37 | set 2, in the same order |
+| 38 to 45 | set 3, in the same order |
+
+A row's `motion_kind_hash` names its move; `invalid` takes the slot's
+default from `fighter/common/ai/param/attack_list_param.prc`. Dash attack,
+dash grab and pivot grab have no row. Attack data rows are found by
+`motion_kind`, in any order.
+
+Stances and forms: the CPU takes each special from the set in the
+fighter's `FIGHTER_INSTANCE_WORK_ID_INT_CUSTOMIZE_SPECIAL_N_NO` (`_S_NO`,
+`_HI_NO`, `_LW_NO`): 0 for the standard rows, 1 to 3 for that set. The
+game reads them every frame (Mii Fighters' custom specials use them), so
+set one from your plugin while the stance lasts:
+
+```rust
+// the CPU's neutral special now comes from rows 22 and 26
+WorkModule::set_int(boma, 1, *FIGHTER_INSTANCE_WORK_ID_INT_CUSTOMIZE_SPECIAL_N_NO);
+```
+
+- The CPU still presses the special button; your status script decides
+  what comes out.
+- Fill the set's rows (move and weights) in your own attack list; an empty
+  row leaves that special out while the set is on.
+- On a Mii base the value also picks the Mii's custom special.
+- Villager, Little Mac, Isabelle, Ryu, Ken, Hero, Mr. Game & Watch, Wario,
+  Terry, Kazuya, Byleth, Steve and Min Min have rules of their own for
+  these rows, so a clone of one may not follow this.
+- The Workbench's **CPU special sets** (Identity, CPU) write this as a
+  line function on the Rust tab: each condition is a `bool` that starts
+  `false` for your check, and the first true one picks the sets.
+
 ## Voice
 
 Any fighter can have a voice, even on a voiceless base (Pac-Man, Villager,

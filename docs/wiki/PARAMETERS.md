@@ -134,7 +134,7 @@ nobody set reads 0, or `None` on a stage.
 
 Ship `fighter/<your name>/param/vl.prc` and it is used instead of the
 base's, also with the base fighter in the same match: each reads its own.
-The camera and CPU parameter trees are all or nothing: set
+The camera parameter tree is all or nothing: set
 `owns_param_resources` only once the whole tree is in your folder; a partial
 tree crashes or loads forever.
 
@@ -151,8 +151,12 @@ your fighter, and its row, with your prcxml and `cpu_param` changes on
 top. The AI picks moves from that fighter's frame data, so pick one that
 moves like yours. The AI of Donkey Kong, Zero Suit Samus, Rosalina,
 Bayonetta, Steve, Ryu and Ken also has code for their own gauges, partners
-or inputs, which finds nothing to use on another fighter. With `cpu_ai`,
-files under `fighter/<name>/ai/` are not read.
+or inputs, which finds nothing to use on another fighter.
+
+Ship `fighter/<name>/ai/param/attack_list_param.prc` and
+`attack_data_param.prc`, or a prcxml of either, and the CPU plays from them
+with the base's or `cpu_ai` fighter's AI code; see
+[FIGHTERS.md](FIGHTERS.md#cpu-ai).
 
 ## What reaches what
 
@@ -166,6 +170,7 @@ files under `fighter/<name>/ai/` are not read.
 | keys of your own on items, enemies and stages | `param.prcxml`, `param` in code |
 | your articles' blocks (`param_<article>`) | `[params]`, `vl.prcxml`, your own `vl.prc` |
 | the CPU's row (`fighter/common/ai/param/fighter_param.prc`) | prcxml, `cpu_param` |
+| the CPU's attack list and attack data (`attack_list_param.prc`, `attack_data_param.prc`) | your own files, prcxml |
 | lists and arrays in `vl.prc` (`hit_data`, ...) | your own `vl.prc` |
 | lists in the common files, `battle_object.prc`, `spirits.prc` | cannot be changed per clone |
 

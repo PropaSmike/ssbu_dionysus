@@ -249,7 +249,6 @@ fn remembered_param_path(kind: i32, path_type: i32) -> Option<i32> {
 pub(crate) fn is_clone_scoped_path_type(path_type: i32, definition: &CloneDefinition) -> bool {
     match path_type {
         12 | 13 => definition.ships_own_param_resources(),
-        19 => definition.ships_own_ai_resources(),
         20 | 22..=31 | 35..=37 => true,
         39 => !CAMERA_ROUTE_DISABLED.load(core::sync::atomic::Ordering::Relaxed),
         _ => false,

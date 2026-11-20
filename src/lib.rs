@@ -145,6 +145,7 @@ mod mod_folders;
 mod param_files;
 mod param_patches;
 mod cpu_ai;
+mod ai_data;
 #[cfg(feature = "css_slot")]
 mod menu_backdrop;
 #[cfg(feature = "css_slot")]
@@ -318,10 +319,6 @@ impl CloneDefinition {
             || self.article_namespace != 0
             || !self.articles.is_empty()
             || self.ships_param_file()
-    }
-
-    fn ships_own_ai_resources(&self) -> bool {
-        self.owns_param_resources
     }
 
     #[cfg(feature = "css_slot")]
@@ -4128,8 +4125,9 @@ unsafe fn fighter_ai_setup_hook(ai: *mut u8, path: *const u8) -> u64 {
     if !ai.is_null() {
         let field = ai.add(AI_KIND) as *mut i32;
         let kind = core::ptr::read_volatile(field);
+        let clone = clone_base(kind).map(|_| kind);
         #[cfg(feature = "css_slot")]
-        cpu_rows::note_ai(ai as usize, clone_base(kind).map(|_| kind));
+        cpu_rows::note_ai(ai as usize, clone);
         if let Some(ai_kind) = cpu_ai::setup_kind(kind) {
             core::ptr::write_volatile(field, ai_kind);
             if AI_SETUP_LOGGED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 16 {
@@ -4144,6 +4142,11 @@ unsafe fn fighter_ai_setup_hook(ai: *mut u8, path: *const u8) -> u64 {
                 }
             }
         }
+        let result = call_original!(ai, path);
+        if let Some(clone) = clone {
+            ai_data::assign(ai as usize, clone);
+        }
+        return result;
     }
     call_original!(ai, path)
 }
@@ -5114,6 +5117,7 @@ pub fn main() {
     mii_parts::load_all();
     spirits::load_all();
     param_patches::load_all();
+    ai_data::install();
 
     #[cfg(feature = "item_clone_backend")]
     enemy_packs::load_all();
