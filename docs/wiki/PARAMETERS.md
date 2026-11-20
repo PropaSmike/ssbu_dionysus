@@ -60,7 +60,7 @@ a `.prcxml`, `.stprmxml` or `.stdatxml` (or `.prcx`, `.stprmx`, `.stdatx`)
 next to it: when the game reads the clone's file, it gets a copy patched
 the way ARCropolis would. Keep the share. For example
 `stage/<place>/normal/param/stageparam_<place>.stprmxml` changes a cloned
-stage's camera and blast lines and leaves the donor alone.
+stage's camera and star KOs and leaves the donor alone.
 
 This works in a clone's `param` folders (`fighter/<name>/param`,
 `fighter/<name>/ai/param`, an item's, enemy's or boss's `param`) and a
