@@ -471,7 +471,9 @@ fn with_picture_tree(entry: &CharacterDatabaseEntry) -> Option<CharacterDatabase
         BoolType::Overwrite(flag) | BoolType::Optional(Some(flag)) => Some(flag),
         BoolType::Optional(None) => None,
     };
-    let patch = crate::ui_pictures::chara_patch_flag(&name, set, entry.clone_from_ui_chara_id)?;
+    let patch = crate::ui_pictures::chara_patch_flag(&name, set, entry.clone_from_ui_chara_id);
+    crate::ui_pictures::report_chara(&name, patch.or(set), entry.clone_from_ui_chara_id);
+    let patch = patch?;
     let mut treed = entry.clone();
     treed.is_patch = BoolType::Overwrite(patch);
     Some(treed)

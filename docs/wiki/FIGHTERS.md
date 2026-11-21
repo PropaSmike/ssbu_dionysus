@@ -49,7 +49,8 @@ Select-screen pictures (`chara_<N>_<name_id>_<costume>.bntx`) go under
 `ui/replace/chara/chara_<N>/` or, as the DLC fighters' do,
 `ui/replace_patch/chara/chara_<N>/`. A fighter reads one tree (`is_patch` in
 its row): the engine points yours at the tree that has your pictures, so keep
-them in one.
+them in one. The boot log's `[pictures]` line shows, for each fighter, what
+each tree holds and which one its row reads.
 
 Classic Mode plays `ui/param/standard/standard_route_<name_label>.prc` when
 your pack ships one, and the base's route otherwise. The route preview titles

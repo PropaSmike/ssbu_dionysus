@@ -5300,28 +5300,15 @@ pub fn main() {
         fighter_ai_param_int_kind_hook,
     );
 
-    skyline::println!(
-        "[clone_engine] installed 20 kind-spoof hooks (9 create_agent dispatchers + fighter-class resolver + static fighter data + auxiliary record + boundary parameters + CPU setup/profile/action/mode gates + four AI data selectors)"
-    );
-
     #[cfg(any(feature = "diag_article", feature = "css_slot"))]
     {
         skyline::install_hook!(generate_article_probe);
-        skyline::println!(
-            "[clone_engine] installed generate_article probe hook (css_slot builds log only tracked Kirby clone-copy BOMA)"
-        );
     }
 
     #[cfg(feature = "css_slot")]
     {
         skyline::install_hooks!(article_probes::observer_purge_refcount_probe);
-        skyline::println!(
-            "[clone_engine] installed the observer purge refcount probe at 0x37ae244; tag [purge], and [purge] UNDERFLOW means a listener node is being destroyed twice"
-        );
         skyline::install_hooks!(kirby_article_init_probe, kirby_article_init_guard,);
-        skyline::println!(
-            "[clone_engine] kirbyinit: copied-article init guard at 0xba3e2c (LOAD-BEARING) plus a              bounded probe at 0xba3e24. 0xba3df0 tail-branches to              ArticleDescriptor.on_init_callback via the BASE fighter's table; the guard serves the              published Kirby-copy header's callback when that yields null. Tag [kirbyinit]."
-        );
     }
 
     #[cfg(all(feature = "css_slot", feature = "diag_kirby_copy"))]
@@ -5360,10 +5347,6 @@ pub fn main() {
             skyline::install_hook!(entry_lifecycle_hook);
         }
         skyline::install_hook!(kind_expander_hook);
-        #[cfg(not(feature = "css_slot"))]
-        skyline::println!(
-            "[clone_engine] v33: use one final kind-0 resource registration while retaining construction kind 118 at 0x14ec24c; keep all proven init/auxiliary/boundary base bridges. Expected tags: [loadfinal] single,[initbridge],[auxkind],[boundkind]."
-        );
         #[cfg(feature = "css_slot")]
         {
             install_custom_resource_name_hooks();
@@ -5416,76 +5399,22 @@ pub fn main() {
                     "[kirbyfam] WARNING could not place the status-interrupt stub; copy status routing is inert"
                 );
             }
-            skyline::println!(
-                "[clone_engine] kirby copy FAMILY route: ONE hook on StatusModule::set_status_kind_interrupt (0x2087740), claimed only for callers inside lua2cpp_kirby's copy dispatcher 0x236ce0..0x239efc - so every per-fighter branch routes and NO Kirby NRO code is patched. Routes an ARMED clone's copied entry to its descriptor-owned status family. Unarmed/unregistered = fully native. Reserve hook 0xAD0 intentionally absent: sv_set_status_func self-grows the status vector (decoded 2026-07-18). Tag [kirbyfam]."
-            );
-            skyline::println!(
-                "[clone_engine] installed descriptor-driven per-thread resource-name hooks"
-            );
-            skyline::println!(
-                "[clone_engine] installed true-kind Kirby copy bridges: native ability tables use each clone's base kind while models use copy_<resource>_fitkirby"
-            );
-            skyline::println!(
-                "[clone_engine] kirbyreg: load-time kirbycopy dir registrar 0x17effe0 bridges custom kinds to their base (fix for the Kirby+kind119 fighter/none/kirbycopy miss APPCRASH); parent 0x17efb80 observed. Tag [kirbyreg]."
-            );
-            skyline::println!(
-                "[clone_engine] wpn probes + resource-slot BRIDGE: per-fighter preload 0x17eeae0 + loader continuation 0x607e44/0x607e74/0x607f28/0x607f98 bracketed; slot walker 0x17f1aa0 remaps raw clone kinds to their base (fix for the Kirby+kind119 APPCRASH pinned at slot enter w2=0x77). Tag [wpn]."
-            );
-            skyline::println!(
-                "[clone_engine] kirby copy RECORD MECHANISM v14: clone slot registration now runs Nintendo's complete creator under the true kind, with a descriptor-owned four-name record and base-owned bodymotion/sound. Native list nodes and teardown replace the old one-member approximation. Tags [kirbynative]/[kirbyrec]/[kirbycreator]."
-            );
-            skyline::println!(
-                "[clone_engine] kirby copy OUTCOME probes: copy_ability_reset 0xb96770 entry (caller LR, catches any post-grant canceller incl. plugin opffs) + Kirby per-fighter-frame 0xb97b30 copy-state tracker (flag 0x20000102 / int 0x100000FC, change-only). Tag [copytrack]."
-            );
-            skyline::println!(
-                "[clone_engine] effect-bank DUAL-LOAD: clone transplant (base+2000) now also loads the VANILLA base eff under the original 0x300+kind handle (vanilla index resolved context-free at type-20) so Kirby-copy and real-base consumers see real samus effects. Tag [effectbank] base-dual-load."
-            );
         }
         skyline::install_hook!(kind_validity_gate_hook);
-        skyline::println!(
-            "[clone_engine] v15: installed kind-validity gate trace+spoof (0x65dd70): kind 118 traced REAL+SPOOF(kind->0) for the first 8 calls then silently spoofed, kind>0x75 traced up to 32 calls, everything else passthrough"
-        );
         skyline::install_hook!(music_slot_load_hook);
         skyline::println!(
             "[clone_engine] stage rows install from the My Music slot load at 0x17d1d70, a game-thread call"
         );
         skyline::install_hook!(load_dispatch_kind_hook);
-        skyline::println!(
-            "[clone_engine] v33: load-dispatch 0x17e5c00 PASSES kind 118 through unchanged so construction can retain the true kind. Tag [loaddisp]."
-        );
         skyline::install_hook!(path_builder_remap_hook);
-        #[cfg(not(feature = "css_slot"))]
-        skyline::println!(
-            "[clone_engine] v33: path-builder 0x17df460 remaps w1 118->0 so the true-118 load resolves fighter/mario assets without changing [load_obj+0x58]. Tag [pathb]."
-        );
-        #[cfg(feature = "css_slot")]
-        skyline::println!(
-            "[clone_engine] path-builder preserves true custom kinds; thread-scoped name hooks resolve their independent resource roots. Tag [pathb]."
-        );
         #[cfg(feature = "css_slot")]
         skyline::install_hook!(custom_native_register_probe);
-        #[cfg(feature = "css_slot")]
-        skyline::println!(
-            "[clone_engine] native custom-kind module verifier uses each descriptor's base module while asset paths retain the custom resource name. Tag [regkind]."
-        );
         skyline::install_hook!(load_final_register_call_hook);
-        #[cfg(not(feature = "css_slot"))]
-        skyline::println!(
-            "[clone_engine] v33: final BL callback mutates saved w1 118->0; Skyline's trampoline executes 0x17e4940 exactly once as kind 0. Construction identity remains independently 118. Tag [loadfinal]."
-        );
-        #[cfg(feature = "css_slot")]
-        skyline::println!(
-            "[clone_engine] v46: final BL callback keeps key 118; Skyline's trampoline executes 0x17e4940 once after its module-name fallback was aliased at boot. Tag [loadfinal]."
-        );
         #[cfg(feature = "css_slot")]
         skyline::install_hooks!(
             custom_group_ready_probe,
             custom_entry_ready_probe,
             custom_base_ready_probe,
-        );
-        #[cfg(feature = "css_slot")]
-        skyline::println!(
-            "[clone_engine] v46: retained custom-object-only readiness probes at group 0x17eb180, entry 0x17e4790, and base 0x17e28c0 with startup-only sampling. Observation only; tag [ready118]."
         );
         #[cfg(not(feature = "diag_article_initspoof"))]
         skyline::install_hooks!(fighter_init_kind_bridge, load_pipeline::fighter_init_member_index);
@@ -5517,17 +5446,11 @@ pub fn main() {
         skyline::install_hook!(load_pipeline::post_init_work_query_probe);
         #[cfg(all(feature = "clone_runtime", feature = "css_slot"))]
         skyline::install_hook!(model_path_namespace_hook);
-        skyline::println!(
-            "[clone_engine] v61: corrected filename/container/texture/dictionary clone_mario UI identities and restored CSK's supported custom name_id; retain the one-costume kind-118 model bridge. Tags [uiasset61]/[modelpath54]/[css118]."
-        );
     }
 
     #[cfg(all(feature = "diag_pathtrace", not(feature = "true_kind")))]
     {
         skyline::install_hook!(path_builder_trace_hook);
-        skyline::println!(
-            "[clone_engine] v15: installed canonical path-builder trace (0x17df460): kind>0x75 calls always logged, first 24 kind<=0x75 calls logged, pure observation (no spoof)"
-        );
     }
 
     report_clone_runtime_hooks();

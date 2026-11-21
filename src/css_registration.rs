@@ -589,6 +589,9 @@ pub(crate) unsafe fn register_one_csk_css_slot(
         Hash40Type::Overwrite(base_ui),
     );
 
+    let reads_patch =
+        crate::ui_pictures::chara_patch_flag(css.ui_name, Some(false), Some(selectable_base_ui)).unwrap_or(false);
+    crate::ui_pictures::report_chara(css.ui_name, Some(reads_patch), Some(selectable_base_ui));
     let entry = CharacterDatabaseEntry {
         ui_chara_id: ui_chara,
         clone_from_ui_chara_id: Some(selectable_base_ui),
@@ -616,10 +619,7 @@ pub(crate) unsafe fn register_one_csk_css_slot(
         is_boss: BoolType::Overwrite(false),
         is_hidden_boss: BoolType::Overwrite(false),
         is_dlc: BoolType::Overwrite(false),
-        is_patch: BoolType::Overwrite(
-            crate::ui_pictures::chara_patch_flag(css.ui_name, Some(false), Some(selectable_base_ui))
-                .unwrap_or(false),
-        ),
+        is_patch: BoolType::Overwrite(reads_patch),
         is_plural_message: BoolType::Overwrite(false),
         is_plural_narration: BoolType::Overwrite(false),
         is_article: BoolType::Overwrite(false),

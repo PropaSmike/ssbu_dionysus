@@ -1,12 +1,18 @@
 use std::collections::HashMap;
+#[cfg(feature = "css_slot")]
+use std::collections::HashSet;
+#[cfg(feature = "css_slot")]
+use std::sync::Mutex;
 use std::sync::OnceLock;
+
+use dionysus_core::ui_pictures::TreePictures;
 
 const MOD_ROOT: &str = "sd:/ultimate/mods";
 const TREES: [(&str, bool); 2] = [("replace", false), ("replace_patch", true)];
 
 #[derive(Default)]
 struct Found {
-    chara: HashMap<String, (bool, bool)>,
+    chara: HashMap<String, [TreePictures; 2]>,
     stage: HashMap<String, (bool, bool)>,
 }
 
@@ -45,8 +51,8 @@ fn scan() -> Found {
                     for file in files.flatten() {
                         let file_name = file.file_name().to_string_lossy().to_ascii_lowercase();
                         if kind == "chara" {
-                            if let Some(name) = dionysus_core::ui_pictures::chara_name(&file_name) {
-                                note(&mut found.chara, name, patch);
+                            if let Some((slot, name, costume)) = dionysus_core::ui_pictures::chara_parts(&file_name) {
+                                found.chara.entry(name.to_string()).or_default()[usize::from(patch)].add(slot, costume);
                             }
                         } else if let Some(name) = dionysus_core::ui_pictures::stage_name(&file_name) {
                             note(&mut found.stage, name, patch);
@@ -59,25 +65,51 @@ fn scan() -> Found {
     found
 }
 
+#[cfg(feature = "stage_slot")]
 fn trees(map: &HashMap<String, (bool, bool)>, name: &str) -> (bool, bool) {
     map.get(&name.to_ascii_lowercase()).copied().unwrap_or_default()
 }
 
 #[cfg(feature = "css_slot")]
-pub(crate) fn chara_patch_flag(name: &str, set: Option<bool>, clone_from: Option<u64>) -> Option<bool> {
-    let base_patch = clone_from.is_some_and(|base| {
+fn chara_trees(name: &str) -> [TreePictures; 2] {
+    found().chara.get(&name.to_ascii_lowercase()).cloned().unwrap_or_default()
+}
+
+#[cfg(feature = "css_slot")]
+fn base_reads_patch(clone_from: Option<u64>) -> bool {
+    clone_from.is_some_and(|base| {
         dionysus_core::ui_pictures::PATCH_ROWS
             .iter()
             .any(|row| crate::hash40::hash40(row) == base)
-    });
-    let (in_replace, in_patch) = trees(&found().chara, name);
-    let patch =
-        dionysus_core::ui_pictures::row_patch_flag(set, base_patch, in_replace, in_patch)?;
-    crate::dbg_log_public(&format!(
-        "[cskrow] {name}: select-screen pictures only under ui/{}/chara, so its row reads that tree",
-        if patch { "replace_patch" } else { "replace" }
+    })
+}
+
+#[cfg(feature = "css_slot")]
+pub(crate) fn chara_patch_flag(name: &str, set: Option<bool>, clone_from: Option<u64>) -> Option<bool> {
+    let [replace, patch] = chara_trees(name);
+    dionysus_core::ui_pictures::row_patch_flag(set, base_reads_patch(clone_from), replace.files > 0, patch.files > 0)
+}
+
+#[cfg(feature = "css_slot")]
+pub(crate) fn report_chara(name: &str, reads_patch: Option<bool>, clone_from: Option<u64>) {
+    static REPORTED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+    {
+        let Ok(mut reported) = REPORTED.lock() else {
+            return;
+        };
+        if !reported.get_or_insert_with(HashSet::new).insert(name.to_ascii_lowercase()) {
+            return;
+        }
+    }
+    let base = base_reads_patch(clone_from);
+    let [replace, patch] = chara_trees(name);
+    crate::dbg_log_public(&dionysus_core::ui_pictures::picture_report(
+        name,
+        &replace,
+        &patch,
+        reads_patch.unwrap_or(base),
+        base,
     ));
-    Some(patch)
 }
 
 #[cfg(feature = "stage_slot")]
