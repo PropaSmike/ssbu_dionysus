@@ -27,6 +27,9 @@ css = false
 
 Every key and method is in the [API reference](../API.md#fighters).
 
+Clones of the Mii Fighters do not load yet: the game builds a Mii's head,
+hat and outfit only for the three Mii Fighters.
+
 ## Character select entry
 
 Your CSK call stays as it is. Two fields name the clone:
