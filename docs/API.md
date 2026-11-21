@@ -859,7 +859,7 @@ item wins. The item calls switch items on and off; they are not params.
 | `menu::register_sequence(code, runs_as)` | A main menu button with `code` starts the vanilla mode `runs_as`; `menu::vanilla_code("other_training")` gives a mode's code by the game's name. |
 | `menu::active_sequence()` | The custom code that started the last mode, `None` after a vanilla one. |
 | `menu::register_call(name, handler)` | Answers `prg_func.engine_call(name, ...)` in main menu Lua. |
-| `menu::battle_player(slot, kind, ui_chara, pad)` | Player selection for the next battle (`PlayerType::Human`, `Cpu`, `Amiibo`, `None`). |
+| `menu::battle_player(slot, kind, ui_chara, pad)` | Player selection for the next battle (`PlayerType::Human`, `Cpu`, `Amiibo`, `None`). A Mii Fighter or a clone of one is refused (-6) and the slot left empty: only the select screen gives it a Mii. |
 | `menu::battle_stage(ui_stage)` | Stage selection for the next battle. |
 | `menu::battle_damage(slot, percent)` | Starting damage for the next battle (`battle_player` resets it to 0). |
 | `menu::battle_color(slot, color)` | Costume for the next battle, 0 to 255 (`battle_player` resets it to 0). |

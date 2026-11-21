@@ -745,6 +745,105 @@ pub fn ghost_row(base: &Param, entry: &Entry) -> Param {
     row
 }
 
+pub const MII_PARAM_PATHS: [&str; 3] = [
+    "fighter/miifighter/param/vl.prc",
+    "fighter/miiswordsman/param/vl.prc",
+    "fighter/miigunner/param/vl.prc",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartRows {
+    pub part: Part,
+    pub id: String,
+    pub base: String,
+    pub copied: usize,
+    pub own: bool,
+}
+
+pub fn part_ui_hash(part: Part, id: &str) -> u64 {
+    hash40(&ui_id(part, id).to_ascii_lowercase())
+}
+
+fn field_naming(row: &Param, hash: u64) -> Option<u64> {
+    match row {
+        Param::Struct(fields) => fields
+            .iter()
+            .find(|(_, value)| matches!(value, Param::Hash(found) if *found == hash))
+            .map(|(key, _)| *key),
+        _ => None,
+    }
+}
+
+fn copy_rows(param: &mut Param, from: u64, to: u64, rows: &mut PartRows) {
+    match param {
+        Param::Struct(fields) => {
+            for (_, value) in fields.iter_mut() {
+                copy_rows(value, from, to, rows);
+            }
+        }
+        Param::List(items) => {
+            for item in items.iter_mut() {
+                copy_rows(item, from, to, rows);
+            }
+            if items.iter().any(|row| field_naming(row, to).is_some()) {
+                rows.own = true;
+                return;
+            }
+            let copies: Vec<Param> = items
+                .iter()
+                .filter_map(|row| {
+                    let key = field_naming(row, from)?;
+                    let mut copy = row.clone();
+                    copy.set(key, Param::Hash(to));
+                    Some(copy)
+                })
+                .collect();
+            rows.copied += copies.len();
+            items.extend(copies);
+        }
+        _ => {}
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartSource {
+    pub part: Part,
+    pub id: String,
+    pub base: String,
+    pub base_hash: u64,
+}
+
+pub fn base_ui_hash(root: &Param, part: Part, base: &str, fighter: Option<MiiFighter>) -> Option<u64> {
+    let named: Vec<&Param> = rows(root)?.iter().filter(|row| row_id(row, part) == Some(base)).collect();
+    let typed = fighter.and_then(|fighter| {
+        named
+            .iter()
+            .find(|row| row.get(hash40("type")).and_then(Param::hash) == Some(fighter.row_type()))
+            .copied()
+    });
+    typed.or_else(|| named.first().copied())?.get(part.ui_key()).and_then(Param::hash)
+}
+
+pub fn add_part_rows(root: &mut Param, parts: &[PartSource]) -> Vec<PartRows> {
+    parts
+        .iter()
+        .map(|source| {
+            let mut rows = PartRows {
+                part: source.part,
+                id: source.id.clone(),
+                base: source.base.clone(),
+                copied: 0,
+                own: false,
+            };
+            let to = part_ui_hash(source.part, &source.id);
+            if source.base_hash != to {
+                copy_rows(root, source.base_hash, to, &mut rows);
+            }
+            rows
+        })
+        .collect()
+}
+
 pub fn add_ghosts(root: &mut Param, part: Part, registry: &Registry) -> Vec<Entry> {
     let mut out = Vec::new();
     for entry in registry.entries.iter().filter(|e| e.part == part) {
@@ -774,6 +873,95 @@ pub fn add_ghosts(root: &mut Param, part: Part, registry: &Registry) -> Vec<Entr
 mod tests {
     use super::*;
     use crate::prc;
+
+    fn keyed_row(key: &str, ui: &str, tex: &str) -> Param {
+        Param::Struct(vec![
+            (hash40("tex_id"), Param::Hash(hash40(tex))),
+            (hash40(key), Param::Hash(hash40(ui))),
+        ])
+    }
+
+    fn swordfighter_params() -> Param {
+        Param::Struct(vec![
+            (hash40("walk_speed_max"), Param::Float(1.0)),
+            (hash40("param_mii_effect_id"), Param::List(vec![
+                keyed_row("mii_body", "ui_mii_body_normalswordman_m", "tex_miiswordsman_sword01"),
+                keyed_row("mii_body", "ui_mii_body_p3hero_m", "tex_miiswordsman_sword40"),
+                keyed_row("mii_body", "ui_mii_body_ironsuit_m", "tex_miiswordsman_sword09"),
+            ])),
+            (0x1e_1553_8020, Param::List(vec![keyed_row("mii_body", "ui_mii_body_rex_m", "")])),
+            (hash40("deep"), Param::Struct(vec![(hash40("hat_rows"), Param::List(vec![
+                keyed_row("mii_hat", "ui_mii_hat_h_sans", "tex_hat"),
+            ]))])),
+        ])
+    }
+
+    fn texture_of(list: &Param, key: &str, ui: &str) -> Vec<u64> {
+        list.list().unwrap().iter()
+            .filter(|row| row.get(hash40(key)).and_then(Param::hash) == Some(hash40(ui)))
+            .filter_map(|row| row.get(hash40("tex_id")).and_then(Param::hash))
+            .collect()
+    }
+
+    fn trail_of(root: &Param, ui: &str) -> Vec<u64> {
+        texture_of(root.get(hash40("param_mii_effect_id")).unwrap(), "mii_body", ui)
+    }
+
+    fn source(part: Part, id: &str, base: &str) -> PartSource {
+        PartSource { part, id: id.into(), base: base.into(), base_hash: part_ui_hash(part, base) }
+    }
+
+    fn outfit(id: &str, base: &str) -> PartSource {
+        source(Part::Outfit, id, base)
+    }
+
+    #[test]
+    fn the_base_id_comes_from_the_row_of_the_new_outfits_fighter() {
+        let maid = |kind: &str, ui: &str| Param::Struct(vec![
+            (hash40("type"), Param::Hash(hash40(kind))),
+            (hash40("mii_body_id"), Param::Str("b_maid_f".into())),
+            (hash40("ui_mii_body_id"), Param::Hash(hash40(ui))),
+        ]);
+        let root = Param::Struct(vec![(hash40("db_root"), Param::List(vec![
+            maid("mii_fighter", "ui_mii_body_maidfighter_f"),
+            maid("mii_swordsman", "ui_mii_body_maidswordsman_f"),
+        ]))]);
+        assert_eq!(base_ui_hash(&root, Part::Outfit, "b_maid_f", Some(MiiFighter::Swordfighter)),
+                   Some(hash40("ui_mii_body_maidswordsman_f")));
+        assert_eq!(base_ui_hash(&root, Part::Outfit, "b_maid_f", None), Some(hash40("ui_mii_body_maidfighter_f")));
+        assert_eq!(base_ui_hash(&root, Part::Outfit, "b_none_f", None), None);
+    }
+
+    #[test]
+    fn a_new_part_takes_every_row_its_base_has() {
+        let mut root = swordfighter_params();
+        let rows = add_part_rows(&mut root, &[outfit("b_kotone_m", "b_p3hero_m"), outfit("b_tin_m", "b_ironSuit_m"),
+                                              outfit("b_blade_m", "b_rex_m"),
+                                              source(Part::Hat, "h_mask", "h_sans")]);
+        assert_eq!(trail_of(&root, "ui_mii_body_kotone_m"), vec![hash40("tex_miiswordsman_sword40")]);
+        assert_eq!(trail_of(&root, "ui_mii_body_tin_m"), vec![hash40("tex_miiswordsman_sword09")]);
+        assert_eq!(rows.iter().map(|r| r.copied).collect::<Vec<_>>(), vec![1, 1, 1, 1]);
+        let joint = root.get(0x1e_1553_8020).and_then(Param::list).unwrap();
+        assert_eq!(joint.len(), 2);
+        assert_eq!(joint[1].get(hash40("mii_body")).and_then(Param::hash), Some(hash40("ui_mii_body_blade_m")));
+        let hats = root.get(hash40("deep")).and_then(|deep| deep.get(hash40("hat_rows"))).unwrap();
+        assert_eq!(texture_of(hats, "mii_hat", "ui_mii_hat_h_mask"), vec![hash40("tex_hat")]);
+        let reparsed = prc::parse(&prc::write(&root)).unwrap();
+        assert_eq!(trail_of(&reparsed, "ui_mii_body_kotone_m"), vec![hash40("tex_miiswordsman_sword40")]);
+    }
+
+    #[test]
+    fn a_part_with_its_own_row_or_a_base_without_one_gets_nothing() {
+        let mut root = swordfighter_params();
+        root.get_mut(hash40("param_mii_effect_id")).and_then(Param::list_mut).unwrap()
+            .push(keyed_row("mii_body", "ui_mii_body_kotone_m", "tex_miiswordsman_sword71"));
+        let before = root.clone();
+        let rows = add_part_rows(&mut root, &[outfit("b_kotone_m", "b_p3hero_m"), outfit("b_brawl_m", "b_chinese_m")]);
+        assert_eq!(trail_of(&root, "ui_mii_body_kotone_m"), vec![hash40("tex_miiswordsman_sword71")]);
+        assert_eq!((rows[0].copied, rows[0].own), (0, true));
+        assert_eq!((rows[1].copied, rows[1].own), (0, false));
+        assert_eq!(root, before);
+    }
 
     fn hat_row(id: &str, save_no: i16, disp: i32) -> Param {
         Param::Struct(vec![

@@ -93,6 +93,8 @@ mod item_work_probe;
 #[cfg(feature = "css_slot")]
 #[cfg(feature = "css_slot")]
 mod finalsmash_residency;
+#[cfg(all(feature = "css_slot", not(feature = "diag_trail")))]
+mod trails;
 #[cfg(feature = "css_slot")]
 mod append_group;
 #[cfg(feature = "css_slot")]
@@ -5118,6 +5120,8 @@ pub fn main() {
     spirits::load_all();
     param_patches::load_all();
     ai_data::install();
+    #[cfg(all(feature = "css_slot", not(feature = "diag_trail")))]
+    trails::install();
 
     #[cfg(feature = "item_clone_backend")]
     enemy_packs::load_all();

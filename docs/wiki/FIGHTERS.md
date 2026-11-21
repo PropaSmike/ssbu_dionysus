@@ -736,6 +736,12 @@ WorkModule::set_int(boma, 1, *FIGHTER_INSTANCE_WORK_ID_INT_CUSTOMIZE_SPECIAL_N_N
   line function on the Rust tab: each condition is a `bool` that starts
   `false` for your check, and the first true one picks the sets.
 
+## Sword trails
+
+A clone without its own `effect/fighter/<name>/trail` folder loads its
+base's trail textures, so its swords leave the base's trails. The boot log
+says so once per clone (`[trail]`).
+
 ## Voice
 
 Any fighter can have a voice, even on a voiceless base (Pac-Man, Villager,

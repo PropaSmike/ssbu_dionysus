@@ -2,8 +2,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use dionysus_core::mii_parts::{
-    self, Added, Assigned, Declaration, Outcome, Part, Registry, HASH_MASK, HAT_DB_PATH,
-    OUTFIT_DB_PATH,
+    self, Added, Assigned, Declaration, MiiFighter, Outcome, Part, PartSource, Registry, HASH_MASK,
+    HAT_DB_PATH, OUTFIT_DB_PATH,
 };
 use dionysus_core::prc;
 
@@ -19,6 +19,7 @@ struct State {
     declarations: Vec<(String, Declaration)>,
     registry: Registry,
     owned: [Vec<u64>; 2],
+    base_ui: Vec<(Part, String, u64)>,
 }
 
 static REFUSED: AtomicBool = AtomicBool::new(false);
@@ -30,6 +31,7 @@ fn state() -> &'static Mutex<State> {
             declarations: Vec::new(),
             registry: Registry::default(),
             owned: [Vec::new(), Vec::new()],
+            base_ui: Vec::new(),
         })
     })
 }
@@ -110,6 +112,21 @@ fn rebuild(part: Part, bytes: &[u8]) -> Option<Vec<u8>> {
     };
     let mut guard = state().lock().ok()?;
     let state = &mut *guard;
+    let mut bases: Vec<(Part, String, u64)> = Vec::new();
+    for (_, d) in state.declarations.iter().filter(|(_, d)| d.part == part) {
+        if let Some(hash) = mii_parts::base_ui_hash(&root, part, &d.base, d.fighter) {
+            bases.push((part, d.id.clone(), hash));
+        }
+    }
+    for entry in state.registry.entries.iter().filter(|e| e.part == part) {
+        if !bases.iter().any(|(_, id, _)| *id == entry.id) {
+            if let Some(hash) = mii_parts::base_ui_hash(&root, part, &entry.base, None) {
+                bases.push((part, entry.id.clone(), hash));
+            }
+        }
+    }
+    state.base_ui.retain(|(p, _, _)| *p != part);
+    state.base_ui.extend(bases);
     let before = state.registry.clone();
     let declarations: Vec<&Declaration> = state.declarations.iter().map(|(_, d)| d).collect();
     let (outcomes, added): (Vec<Outcome>, Vec<Added>) =
@@ -166,6 +183,111 @@ fn serve(part: Part, hash: u64, buffer: *mut u8, length: usize, out_size: &mut u
         None => *out_size = size,
     }
     true
+}
+
+fn part_sources() -> Vec<(PartSource, bool)> {
+    let Ok(state) = state().lock() else {
+        return Vec::new();
+    };
+    let base_hash = |part: Part, id: &str, base: &str| {
+        state
+            .base_ui
+            .iter()
+            .find(|(p, known, _)| *p == part && known == id)
+            .map(|(_, _, hash)| *hash)
+            .unwrap_or_else(|| mii_parts::part_ui_hash(part, base))
+    };
+    let mut out: Vec<(PartSource, bool)> = state
+        .declarations
+        .iter()
+        .map(|(_, d)| {
+            let source = PartSource {
+                part: d.part,
+                id: d.id.clone(),
+                base: d.base.clone(),
+                base_hash: base_hash(d.part, &d.id, &d.base),
+            };
+            (source, d.part == Part::Outfit && d.fighter == Some(MiiFighter::Swordfighter))
+        })
+        .collect();
+    for entry in &state.registry.entries {
+        if !out.iter().any(|(source, _)| source.part == entry.part && source.id == entry.id) {
+            let source = PartSource {
+                part: entry.part,
+                id: entry.id.clone(),
+                base: entry.base.clone(),
+                base_hash: base_hash(entry.part, &entry.id, &entry.base),
+            };
+            out.push((source, false));
+        }
+    }
+    out
+}
+
+fn serve_part_rows(path: &str, hash: u64, buffer: *mut u8, length: usize, out_size: &mut usize) -> bool {
+    if buffer.is_null() || length == 0 {
+        return false;
+    }
+    let slice = unsafe { core::slice::from_raw_parts_mut(buffer, length) };
+    let Some(size) = arcropolis_api::load_original_file(hash, &mut *slice) else {
+        skyline::println!("[miiparts] {path} could not be loaded; no hat or outfit rows added to it");
+        return false;
+    };
+    *out_size = size;
+    let mut root = match prc::parse(&slice[..size]) {
+        Ok(root) => root,
+        Err(error) => {
+            skyline::println!("[miiparts] {path} is not readable ({error:?}); served as it is");
+            return true;
+        }
+    };
+    let sources = part_sources();
+    let parts: Vec<PartSource> = sources.iter().map(|(source, _)| source.clone()).collect();
+    let rows = mii_parts::add_part_rows(&mut root, &parts);
+    let swordfighter = path.contains("miiswordsman");
+    for (row, (_, sword)) in rows.iter().zip(&sources) {
+        if row.copied > 0 {
+            skyline::println!(
+                "[miiparts] {} {} takes {}'s {} row(s) in {path}",
+                row.part.name(),
+                row.id,
+                row.base,
+                row.copied
+            );
+        } else if swordfighter && *sword && !row.own {
+            skyline::println!(
+                "[miiparts] outfit {}: base {} has no sword trail row in {path}, so it has no trail",
+                row.id,
+                row.base
+            );
+        }
+    }
+    if rows.iter().all(|row| row.copied == 0) {
+        return true;
+    }
+    let bytes = prc::write(&root);
+    if bytes.len() > length {
+        skyline::println!(
+            "[miiparts] {path} grew to {} bytes, past the {length} reserved; served without the hats' and outfits' rows",
+            bytes.len()
+        );
+        return true;
+    }
+    slice[..bytes.len()].copy_from_slice(&bytes);
+    *out_size = bytes.len();
+    true
+}
+
+extern "C" fn serve_brawler_params(hash: u64, buffer: *mut u8, length: usize, out_size: &mut usize) -> bool {
+    serve_part_rows(mii_parts::MII_PARAM_PATHS[0], hash, buffer, length, out_size)
+}
+
+extern "C" fn serve_swordfighter_params(hash: u64, buffer: *mut u8, length: usize, out_size: &mut usize) -> bool {
+    serve_part_rows(mii_parts::MII_PARAM_PATHS[1], hash, buffer, length, out_size)
+}
+
+extern "C" fn serve_gunner_params(hash: u64, buffer: *mut u8, length: usize, out_size: &mut usize) -> bool {
+    serve_part_rows(mii_parts::MII_PARAM_PATHS[2], hash, buffer, length, out_size)
 }
 
 extern "C" fn serve_hats(hash: u64, buffer: *mut u8, length: usize, out_size: &mut usize) -> bool {
@@ -269,6 +391,11 @@ pub(crate) fn load_all() {
     }
     arcropolis_api::register_callback(HAT_DB_PATH, SERVE_CAPACITY, serve_hats);
     arcropolis_api::register_callback(OUTFIT_DB_PATH, SERVE_CAPACITY, serve_outfits);
+    let params: [extern "C" fn(u64, *mut u8, usize, &mut usize) -> bool; 3] =
+        [serve_brawler_params, serve_swordfighter_params, serve_gunner_params];
+    for (path, serve) in mii_parts::MII_PARAM_PATHS.into_iter().zip(params) {
+        arcropolis_api::register_callback(path, SERVE_CAPACITY, serve);
+    }
     skyline::install_hooks!(hat_owned, outfit_owned);
     skyline::println!(
         "[miiparts] {hats} hat(s) and {outfits} outfit(s) from mii.toml packs; rows are added when the game loads its tables"

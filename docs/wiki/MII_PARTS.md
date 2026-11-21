@@ -30,7 +30,7 @@ Each part copies every value of its `base` row, then changes these:
 | `model_type` | What shows of the Mii's head (see Head) |
 | `hair_model_types` | Per hair style overrides, `["12=face_only", "40=hat"]` |
 | `disp_order` | Place in the lists; default after the game's |
-| `swing` | Swing bones on or off; default the base's |
+| `swing` | The row's `swing_enabled`; default the base's. Only Robin's and Roto's outfits have it on, and it does not switch swing bones, which come from `swing.prc` |
 | `is_patch` | The post-launch hats' look; default the base's |
 | `owned` | Default `true`; `false` keeps it out of the menus |
 
@@ -66,6 +66,10 @@ Each part copies every value of its `base` row, then changes these:
 - An outfit's motion folder holds the base's `update.prc`, `ik.prc`,
   `flip.prc` and `scharge.prc`, and `motion_list.bin` and `swing.prc` when
   the base has them.
+- The Mii fighters' `vl.prc` rows that name the base are copied for the new
+  part: a Swordfighter outfit gets its base's sword trail and flare
+  (`param_mii_effect_id`), and Rex's and Zero's sword effect. A part with
+  its own row there keeps it.
 
 ### config.json
 

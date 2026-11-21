@@ -86,6 +86,7 @@ pub(crate) enum Refusal {
     Hash,
     NoBattle,
     Busy,
+    Mii,
 }
 
 impl Refusal {
@@ -96,8 +97,29 @@ impl Refusal {
             Refusal::Hash => -3,
             Refusal::NoBattle => -4,
             Refusal::Busy => -5,
+            Refusal::Mii => -6,
         }
     }
+}
+
+const MII_FIGHTERS: [&str; 3] = ["miifighter", "miiswordsman", "miigunner"];
+
+fn is_mii_fighter(hash: u64) -> bool {
+    if MII_FIGHTERS
+        .iter()
+        .any(|name| crate::hash40::hash40(&format!("ui_chara_{name}")) == hash)
+    {
+        return true;
+    }
+    crate::clone_definitions()
+        .read()
+        .map(|definitions| {
+            definitions.iter().any(|definition| {
+                crate::hash40::hash40(definition.ui_chara) == hash
+                    && MII_FIGHTERS.contains(&definition.base_resource_name)
+            })
+        })
+        .unwrap_or(false)
 }
 
 unsafe fn write<T>(address: usize, value: T) {
@@ -115,6 +137,14 @@ pub(crate) fn set_player(slot: u32, kind: u32, chara: u64, pad: i32) -> Result<(
     let hash = chara & menu::HASH_MASK;
     if hash == 0 && kind != 3 {
         return Err(Refusal::Hash);
+    }
+    if kind != 3 && is_mii_fighter(hash) {
+        skyline::println!(
+            "[menubattle] player {} refused: {hash:#012x} is a Mii Fighter, whose Mii only the select screen sets up; the slot is left empty",
+            slot + 1
+        );
+        let _ = set_player(slot as u32, 3, 0, -1);
+        return Err(Refusal::Mii);
     }
     let value = menu::tagged(menu::CHARA_TAG, hash);
     unsafe {

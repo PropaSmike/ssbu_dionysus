@@ -122,6 +122,8 @@ given, so `0x0edaf3c863` (`hash40("ui_chara_mario")`) works as well.
 | `engine.sequence` | the id of a `[[sequence]]` or `[[mode]]`: its code, 0 for an id no pack declared |
 
 Each returns 0, or a negative code when refused. `engine.battle_player`
+refuses a Mii Fighter or a clone of one (-6) and leaves that slot empty:
+only the select screen gives it a Mii. `engine.battle_player`
 also sets the player's starting damage and costume to 0; without it a player starts
 with whatever the last battle that used the slot left there (the title
 demo's battles included). Like the players, the rules are what the last battle left (the title
